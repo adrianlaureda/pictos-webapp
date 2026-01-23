@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <script>
+        if (localStorage.getItem('darkMode') === 'false') {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pictos — Conversor de Texto a Pictogramas</title>
+
+    <!-- Fuentes: Geist -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- mammoth.js - Leer .docx -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
+    <!-- docx.js - Generar .docx -->
+    <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
+
+    <style>
+        /* Reset y variables */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #fafafa;
+            --bg-elevated: #ffffff;
+            --text: #171717;
+            --text-muted: #737373;
+            --text-subtle: #a3a3a3;
+            --border: #e5e5e5;
+            --accent: #f59e0b;
+            --accent-soft: #fef3c7;
+            --success: #22c55e;
+            --error: #ef4444;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-lg: 0 10px 40px rgba(0,0,0,0.08);
+            --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .dark {
+            --bg: #0a0a0a;
+            --bg-elevated: #141414;
+            --text: #fafafa;
+            --text-muted: #a3a3a3;
+            --text-subtle: #525252;
+            --border: #262626;
+            --accent: #fbbf24;
+            --accent-soft: #451a0310;
+            --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+            --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
+        }
+
+        html {
+            font-family: 'Instrument Sans', system-ui, sans-serif;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+            transition: background var(--transition), color var(--transition);
+        }
+
+        /* Layout principal */
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 2.5rem 1.5rem 3rem;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2.5rem;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-icon svg {
+            width: 18px;
+            height: 18px;
+            color: #0a0a0a;
+        }
+
+        .logo-text {
+            font-size: 1.125rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        /* Botones */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            font-family: inherit;
+            border-radius: var(--radius-sm);
+            border: none;
+            cursor: pointer;
+            transition: all var(--transition);
+            text-decoration: none;
+        }
+
+        .btn-icon {
+            padding: 0.625rem;
+        }
+
+        .btn-icon svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+        }
+
+        .btn-ghost:hover {
+            background: var(--border);
+            color: var(--text);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-outline:hover {
+            background: var(--bg-elevated);
+            border-color: var(--text-subtle);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #0a0a0a;
+            font-weight: 600;
+        }
+
+        .btn-primary:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            filter: none;
+        }
+
+        /* Indicador de pasos */
+        .steps-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+        }
+
+        .step-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--border);
+            transition: all var(--transition);
+        }
+
+        .step-dot.active {
+            background: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-soft);
+        }
+
+        .step-dot.completed {
+            background: var(--accent);
+        }
+
+        .step-line {
+            width: 40px;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* Secciones */
+        section {
+            animation: fadeIn 0.4s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .section-heading {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.5rem;
+            line-height: 1.2;
+        }
+
+        .section-description {
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+        }
+
+        /* Textarea */
+        .textarea-wrapper {
+            position: relative;
+            margin-bottom: 1.25rem;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 140px;
+            padding: 1rem 1.25rem;
+            font-size: 1rem;
+            font-family: inherit;
+            line-height: 1.7;
+            background: var(--bg-elevated);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            resize: vertical;
+            transition: all var(--transition);
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        textarea::placeholder {
+            color: var(--text-subtle);
+        }
+
+        /* Separador */
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 1.25rem 0;
+            color: var(--text-subtle);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* Dropzone */
+        .dropzone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 2rem 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all var(--transition);
+            margin-bottom: 1.75rem;
+        }
+
+        .dropzone:hover {
+            border-color: var(--text-subtle);
+            background: var(--bg-elevated);
+        }
+
+        .dropzone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+        }
+
+        .dropzone-icon {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 0.875rem;
+            color: var(--text-subtle);
+        }
+
+        .dropzone-text {
+            color: var(--text-muted);
+            font-size: 0.9375rem;
+        }
+
+        .dropzone-text strong {
+            color: var(--text);
+        }
+
+        .dropzone-file {
+            margin-top: 0.75rem;
+            font-size: 0.875rem;
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        /* Contenedor de palabras */
+        .words-container {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            min-height: 120px;
+            margin-bottom: 1.5rem;
+            line-height: 2.2;
+        }
+
+        .word-token {
+            display: inline-block;
+            padding: 0.25rem 0.625rem;
+            margin: 0.125rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 150ms ease;
+            font-size: 1rem;
+        }
+
+        .word-token:hover {
+            background: var(--border);
+        }
+
+        .word-token.selected {
+            background: var(--accent);
+            color: #0a0a0a;
+            font-weight: 500;
+        }
+
+        .word-token.punctuation {
+            cursor: default;
+            padding: 0 2px;
+            margin: 0;
+        }
+
+        .word-token.punctuation:hover {
+            background: transparent;
+        }
+
+        /* Acciones de sección */
+        .section-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .action-group {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        /* Preview documento - siempre modo claro */
+        .preview-wrapper {
+            background: #e5e5e5;
+            border-radius: var(--radius);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .dark .preview-wrapper {
+            background: #1a1a1a;
+        }
+
+        .preview-document {
+            background: white;
+            color: #171717;
+            box-shadow: var(--shadow-lg);
+            max-width: 210mm;
+            min-height: 200px;
+            padding: 15mm 20mm;
+            margin: 0 auto;
+            border-radius: 2px;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        /* Picto en preview */
+        .picto-container {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            vertical-align: bottom;
+            margin: 4px 3px;
+        }
+
+        .picto-image {
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            background: white;
+        }
+
+        .picto-caption {
+            font-size: 9px;
+            color: #737373;
+            margin-top: 3px;
+            text-align: center;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .no-picto {
+            color: #a3a3a3;
+            font-style: italic;
+            position: relative;
+        }
+
+        .no-picto::after {
+            content: 'Sin pictograma';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #171717;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            font-style: normal;
+        }
+
+        .no-picto:hover::after {
+            opacity: 1;
+        }
+
+        /* Loading state */
+        .loading-state {
+            text-align: center;
+            padding: 3rem 2rem;
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: var(--text-muted);
+            font-size: 0.9375rem;
+            margin-bottom: 1rem;
+        }
+
+        .progress-bar {
+            width: 200px;
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--transition);
+        }
+
+        .modal-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 360px;
+            margin: 1rem;
+            transform: scale(0.95);
+            transition: transform var(--transition);
+        }
+
+        .modal-overlay.visible .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+
+        .modal-close:hover {
+            background: var(--border);
+            color: var(--text);
+        }
+
+        /* Radio buttons personalizados */
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: background var(--transition);
+        }
+
+        .radio-label:hover {
+            background: var(--bg);
+        }
+
+        .radio-label input {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            transition: all var(--transition);
+            position: relative;
+        }
+
+        .radio-label input:checked {
+            border-color: var(--accent);
+            background: var(--accent);
+        }
+
+        .radio-label input:checked::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 6px;
+            height: 6px;
+            background: #0a0a0a;
+            border-radius: 50%;
+        }
+
+        .radio-text {
+            font-size: 0.9375rem;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            padding: 0.875rem 1.25rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            font-weight: 500;
+            box-shadow: var(--shadow-lg);
+            transform: translateY(100%);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 200;
+        }
+
+        .toast.visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success {
+            background: var(--success);
+            color: white;
+        }
+
+        .toast.error {
+            background: var(--error);
+            color: white;
+        }
+
+        .toast.info {
+            background: var(--accent);
+            color: #0a0a0a;
+        }
+
+        /* Utilidades */
+        .hidden { display: none !important; }
+        .center { text-align: center; }
+
+        /* Estilos de impresión */
+        @media print {
+            @page {
+                margin: 15mm 20mm;
+            }
+            body > * {
+                display: none !important;
+            }
+            body {
+                background: white !important;
+            }
+            #printContainer {
+                display: block !important;
+                width: 100% !important;
+                padding: 0 !important;
+                background: white !important;
+                color: black !important;
+            }
+            #printContainer * {
+                color: black !important;
+            }
+            #printContainer img {
+                max-width: 80px !important;
+            }
+            .picto-inline {
+                display: inline-flex !important;
+                page-break-inside: avoid !important;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .container {
+                padding: 1.5rem 1rem 2rem;
+            }
+
+            header {
+                margin-bottom: 2rem;
+            }
+
+            .section-heading {
+                font-size: 1.5rem;
+            }
+
+            .section-actions {
+                flex-direction: column;
+            }
+
+            .action-group {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .btn {
+                flex: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                </div>
+                <span class="logo-text">Pictos</span>
+            </div>
+            <div class="header-actions">
+                <button id="themeToggle" class="btn btn-icon btn-ghost" title="Cambiar tema">
+                    <svg id="sunIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"/>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg id="moonIcon" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+                <button id="settingsBtn" class="btn btn-icon btn-ghost" title="Configuración">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Indicador de pasos -->
+        <div class="steps-indicator">
+            <div id="stepDot1" class="step-dot active"></div>
+            <div class="step-line"></div>
+            <div id="stepDot2" class="step-dot"></div>
+            <div class="step-line"></div>
+            <div id="stepDot3" class="step-dot"></div>
+        </div>
+
+        <!-- Paso 1: Entrada de texto -->
+        <section id="step1">
+            <p class="section-title">Paso 1</p>
+            <h1 class="section-heading">Carga tu actividad</h1>
+            <p class="section-description">Pega el texto o sube un documento .docx para añadir pictogramas ARASAAC.</p>
+
+            <div class="textarea-wrapper">
+                <textarea
+                    id="textInput"
+                    placeholder="Escribe o pega aquí el texto de tu actividad..."
+                ></textarea>
+            </div>
+
+            <div class="divider">o</div>
+
+            <div id="dropzone" class="dropzone">
+                <input type="file" id="fileInput" accept=".docx" class="hidden">
+                <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <p class="dropzone-text">Arrastra un archivo <strong>.docx</strong> o haz clic para seleccionar</p>
+                <p id="fileName" class="dropzone-file hidden"></p>
+            </div>
+
+            <div class="center">
+                <button id="loadTextBtn" class="btn btn-primary">
+                    Continuar
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
+        </section>
+
+        <!-- Paso 2: Selección de palabras -->
+        <section id="step2" class="hidden">
+            <p class="section-title">Paso 2</p>
+            <h1 class="section-heading">Selecciona palabras</h1>
+            <p class="section-description">Haz clic en las palabras que quieres convertir a pictogramas.</p>
+
+            <div id="wordContainer" class="words-container"></div>
+
+            <div class="section-actions">
+                <button id="selectAllBtn" class="btn btn-outline">
+                    Seleccionar todas
+                </button>
+                <div class="action-group">
+                    <button id="backToStep1Btn" class="btn btn-ghost">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Volver
+                    </button>
+                    <button id="convertBtn" class="btn btn-primary" disabled>
+                        Convertir
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Paso 3: Previsualización -->
+        <section id="step3" class="hidden">
+            <p class="section-title">Paso 3</p>
+            <h1 class="section-heading">Previsualización</h1>
+            <p class="section-description">Revisa el resultado y descarga en el formato que prefieras.</p>
+
+            <!-- Estado de carga -->
+            <div id="loadingState" class="loading-state hidden">
+                <div class="spinner"></div>
+                <p id="loadingText" class="loading-text">Buscando pictogramas...</p>
+                <div class="progress-bar">
+                    <div id="progressBar" class="progress-fill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Documento de previsualización -->
+            <div id="previewContainer" class="hidden">
+                <div class="preview-wrapper">
+                    <div id="previewDocument" class="preview-document"></div>
+                </div>
+
+                <div class="section-actions" style="justify-content: center;">
+                    <button id="backToStep2Btn" class="btn btn-ghost">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Editar
+                    </button>
+                    <button id="downloadDocxBtn" class="btn btn-outline">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        .docx
+                    </button>
+                    <button id="downloadPdfBtn" class="btn btn-primary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        .pdf
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Modal de configuración -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">Configuración</h2>
+                <button id="closeModalBtn" class="modal-close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1rem;">Tamaño de pictogramas</p>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="pictoSize" value="40">
+                    <span class="radio-text">Pequeño (40px)</span>
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="pictoSize" value="60" checked>
+                    <span class="radio-text">Mediano (60px)</span>
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="pictoSize" value="80">
+                    <span class="radio-text">Grande (80px)</span>
+                </label>
+            </div>
+
+            <div class="modal-actions">
+                <button id="cancelSettingsBtn" class="btn btn-ghost">Cancelar</button>
+                <button id="saveSettingsBtn" class="btn btn-primary">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // Estado global
+        const state = {
+            text: '',
+            tokens: [],
+            selectedWords: new Set(),
+            pictos: new Map(),
+            translations: new Map(),
+            pictoSize: parseInt(localStorage.getItem('pictoSize') || '60'),
+            darkMode: localStorage.getItem('darkMode') !== 'false'
+        };
+
+        // Elementos del DOM
+        const $ = id => document.getElementById(id);
+        const elements = {
+            textInput: $('textInput'),
+            fileInput: $('fileInput'),
+            dropzone: $('dropzone'),
+            fileName: $('fileName'),
+            loadTextBtn: $('loadTextBtn'),
+            wordContainer: $('wordContainer'),
+            selectAllBtn: $('selectAllBtn'),
+            convertBtn: $('convertBtn'),
+            backToStep1Btn: $('backToStep1Btn'),
+            backToStep2Btn: $('backToStep2Btn'),
+            loadingState: $('loadingState'),
+            loadingText: $('loadingText'),
+            progressBar: $('progressBar'),
+            previewContainer: $('previewContainer'),
+            previewDocument: $('previewDocument'),
+            downloadDocxBtn: $('downloadDocxBtn'),
+            downloadPdfBtn: $('downloadPdfBtn'),
+            themeToggle: $('themeToggle'),
+            moonIcon: $('moonIcon'),
+            sunIcon: $('sunIcon'),
+            settingsBtn: $('settingsBtn'),
+            settingsModal: $('settingsModal'),
+            closeModalBtn: $('closeModalBtn'),
+            cancelSettingsBtn: $('cancelSettingsBtn'),
+            saveSettingsBtn: $('saveSettingsBtn'),
+            toast: $('toast'),
+            step1: $('step1'),
+            step2: $('step2'),
+            step3: $('step3'),
+            stepDot1: $('stepDot1'),
+            stepDot2: $('stepDot2'),
+            stepDot3: $('stepDot3')
+        };
+
+        // Mostrar toast
+        function showToast(message, type = 'info') {
+            elements.toast.textContent = message;
+            elements.toast.className = `toast ${type} visible`;
+            setTimeout(() => elements.toast.classList.remove('visible'), 3000);
+        }
+
+        // Tokenizar texto
+        function tokenizeText(text) {
+            const tokens = [];
+            const regex = /(\S+|\n)/g;
+            let match;
+
+            while ((match = regex.exec(text)) !== null) {
+                const token = match[1];
+
+                if (token === '\n') {
+                    tokens.push({ type: 'newline', value: '\n' });
+                    continue;
+                }
+
+                const leadingPunct = token.match(/^[^\wáéíóúüñÁÉÍÓÚÜÑ]+/);
+                const trailingPunct = token.match(/[^\wáéíóúüñÁÉÍÓÚÜÑ]+$/);
+                let word = token;
+
+                if (leadingPunct) {
+                    tokens.push({ type: 'punctuation', value: leadingPunct[0] });
+                    word = word.slice(leadingPunct[0].length);
+                }
+
+                if (trailingPunct && word.length > trailingPunct[0].length) {
+                    const trail = trailingPunct[0];
+                    word = word.slice(0, -trail.length);
+                    if (word) tokens.push({ type: 'word', value: word });
+                    tokens.push({ type: 'punctuation', value: trail });
+                } else if (word) {
+                    if (/^[^\wáéíóúüñÁÉÍÓÚÜÑ]+$/.test(word)) {
+                        tokens.push({ type: 'punctuation', value: word });
+                    } else {
+                        tokens.push({ type: 'word', value: word });
+                    }
+                }
+            }
+            return tokens;
+        }
+
+        // Diccionario gallego-español
+        const gallegoEspanol = {
+            'neno': 'niño', 'nena': 'niña', 'nenos': 'niños', 'nenas': 'niñas',
+            'can': 'perro', 'gato': 'gato', 'casa': 'casa',
+            'auga': 'agua', 'leite': 'leche', 'pan': 'pan',
+            'comer': 'comer', 'beber': 'beber', 'durmir': 'dormir',
+            'xogar': 'jugar', 'correr': 'correr', 'andar': 'andar',
+            'falar': 'hablar', 'escoitar': 'escuchar', 'mirar': 'mirar',
+            'libro': 'libro', 'caderno': 'cuaderno', 'lapis': 'lápiz',
+            'escola': 'escuela', 'clase': 'clase', 'mestre': 'maestro',
+            'pai': 'padre', 'nai': 'madre', 'irmán': 'hermano', 'irmá': 'hermana',
+            'avó': 'abuelo', 'avoa': 'abuela',
+            'grande': 'grande', 'pequeno': 'pequeño', 'bo': 'bueno', 'malo': 'malo',
+            'branco': 'blanco', 'negro': 'negro', 'vermello': 'rojo', 'azul': 'azul',
+            'verde': 'verde', 'amarelo': 'amarillo',
+            'hoxe': 'hoy', 'mañá': 'mañana', 'onte': 'ayer',
+            'si': 'sí', 'non': 'no', 'e': 'y', 'ou': 'o',
+            'un': 'un', 'unha': 'una', 'o': 'el', 'a': 'la',
+            'mazá': 'manzana', 'laranxa': 'naranja', 'pera': 'pera',
+            'mesa': 'mesa', 'cadeira': 'silla', 'porta': 'puerta', 'ventá': 'ventana',
+            'sol': 'sol', 'lúa': 'luna', 'estrela': 'estrella', 'ceo': 'cielo',
+            'árbore': 'árbol', 'flor': 'flor', 'herba': 'hierba',
+            'peixe': 'pez', 'paxaro': 'pájaro', 'vaca': 'vaca', 'cabalo': 'caballo'
+        };
+
+        // Buscar picto en API
+        async function searchPictoAPI(word) {
+            try {
+                const url = `https://symbotalkapiv1.azurewebsites.net/search/?name=${encodeURIComponent(word)}&lang=es&repo=arasaac&limit=3`;
+                const response = await fetch(url);
+                if (!response.ok) return null;
+                const data = await response.json();
+                return data?.[0]?.image_url || null;
+            } catch { return null; }
+        }
+
+        async function searchPicto(word) {
+            const wordLower = word.toLowerCase();
+            let pictoUrl = await searchPictoAPI(wordLower);
+            if (pictoUrl) return pictoUrl;
+
+            const traduccionLocal = gallegoEspanol[wordLower];
+            if (traduccionLocal) {
+                pictoUrl = await searchPictoAPI(traduccionLocal);
+                if (pictoUrl) {
+                    state.translations.set(wordLower, traduccionLocal);
+                    return pictoUrl;
+                }
+            }
+
+            try {
+                const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=gl|es`;
+                const response = await fetch(url);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data?.responseData?.translatedText) {
+                        const translated = data.responseData.translatedText.toLowerCase().trim();
+                        if (translated !== wordLower && !translated.includes('.') && translated.length < 30) {
+                            pictoUrl = await searchPictoAPI(translated);
+                            if (pictoUrl) {
+                                state.translations.set(wordLower, translated);
+                                return pictoUrl;
+                            }
+                        }
+                    }
+                }
+            } catch {}
+            return null;
+        }
+
+        // Gestión del tema
+        function updateThemeIcons() {
+            if (state.darkMode) {
+                document.documentElement.classList.add('dark');
+                elements.moonIcon.classList.add('hidden');
+                elements.sunIcon.classList.remove('hidden');
+            } else {
+                document.documentElement.classList.remove('dark');
+                elements.moonIcon.classList.remove('hidden');
+                elements.sunIcon.classList.add('hidden');
+            }
+        }
+
+        function toggleTheme() {
+            state.darkMode = !state.darkMode;
+            localStorage.setItem('darkMode', state.darkMode);
+            updateThemeIcons();
+        }
+
+        // Cargar archivo .docx
+        async function loadDocxFile(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const result = await mammoth.extractRawText({ arrayBuffer });
+                elements.textInput.value = result.value;
+                elements.fileName.textContent = file.name;
+                elements.fileName.classList.remove('hidden');
+                showToast('Documento cargado', 'success');
+            } catch (error) {
+                showToast('Error al cargar el documento', 'error');
+            }
+        }
+
+        // Renderizar palabras
+        function renderWords() {
+            elements.wordContainer.innerHTML = '';
+            state.tokens.forEach((token, index) => {
+                if (token.type === 'newline') {
+                    elements.wordContainer.appendChild(document.createElement('br'));
+                    return;
+                }
+                const span = document.createElement('span');
+                span.textContent = token.value;
+                span.dataset.index = index;
+                if (token.type === 'word') {
+                    span.className = 'word-token' + (state.selectedWords.has(index) ? ' selected' : '');
+                    span.addEventListener('click', () => toggleWordSelection(index));
+                } else {
+                    span.className = 'word-token punctuation';
+                }
+                elements.wordContainer.appendChild(span);
+            });
+            updateConvertButton();
+        }
+
+        function toggleWordSelection(index) {
+            state.selectedWords.has(index) ? state.selectedWords.delete(index) : state.selectedWords.add(index);
+            renderWords();
+        }
+
+        function selectAllWords() {
+            const allSelected = state.tokens.filter(t => t.type === 'word').length === state.selectedWords.size;
+            if (allSelected) {
+                state.selectedWords.clear();
+            } else {
+                state.tokens.forEach((token, index) => {
+                    if (token.type === 'word') state.selectedWords.add(index);
+                });
+            }
+            renderWords();
+        }
+
+        function updateConvertButton() {
+            elements.convertBtn.disabled = state.selectedWords.size === 0;
+        }
+
+        // Convertir a pictogramas
+        async function convertToPictos() {
+            showStep(3);
+            elements.loadingState.classList.remove('hidden');
+            elements.previewContainer.classList.add('hidden');
+
+            const uniqueWords = [...new Set(Array.from(state.selectedWords).map(idx => state.tokens[idx].value.toLowerCase()))];
+            let completed = 0;
+
+            for (const word of uniqueWords) {
+                elements.loadingText.textContent = `Buscando: ${word}`;
+                if (!state.pictos.has(word)) {
+                    state.pictos.set(word, await searchPicto(word));
+                }
+                completed++;
+                elements.progressBar.style.width = `${(completed / uniqueWords.length) * 100}%`;
+            }
+
+            elements.loadingState.classList.add('hidden');
+            elements.previewContainer.classList.remove('hidden');
+            renderPreview();
+        }
+
+        // Renderizar previsualización
+        function renderPreview() {
+            let html = '';
+            state.tokens.forEach((token, index) => {
+                if (token.type === 'newline') { html += '<br>'; return; }
+                if (token.type === 'word' && state.selectedWords.has(index)) {
+                    const word = token.value.toLowerCase();
+                    const pictoUrl = state.pictos.get(word);
+                    const translation = state.translations.get(word);
+                    const captionText = translation && translation !== word ? `${token.value} (${translation})` : token.value;
+
+                    if (pictoUrl) {
+                        html += `<span class="picto-container">
+                            <img src="${pictoUrl}" alt="${token.value}" class="picto-image" style="width:${state.pictoSize}px;height:${state.pictoSize}px;object-fit:contain;">
+                            <span class="picto-caption">${captionText}</span>
+                        </span>`;
+                    } else {
+                        html += `<span class="no-picto">${token.value}</span> `;
+                    }
+                } else {
+                    html += token.value + (token.type === 'word' ? ' ' : '');
+                }
+            });
+            elements.previewDocument.innerHTML = html;
+        }
+
+        // Exportar a .docx
+        async function downloadDocx() {
+            try {
+                showToast('Generando documento...', 'info');
+                const { Document, Paragraph, TextRun, ImageRun, Packer } = window.docx;
+                const children = [];
+                let currentParagraphChildren = [];
+                const imageCache = new Map();
+
+                for (let i = 0; i < state.tokens.length; i++) {
+                    const token = state.tokens[i];
+                    if (token.type === 'word' && state.selectedWords.has(i)) {
+                        const pictoUrl = state.pictos.get(token.value.toLowerCase());
+                        if (pictoUrl && !imageCache.has(pictoUrl)) {
+                            try {
+                                const response = await fetch(pictoUrl);
+                                const blob = await response.blob();
+                                imageCache.set(pictoUrl, await blob.arrayBuffer());
+                            } catch {}
+                        }
+                    }
+                }
+
+                for (let i = 0; i < state.tokens.length; i++) {
+                    const token = state.tokens[i];
+                    if (token.type === 'newline') {
+                        if (currentParagraphChildren.length > 0) {
+                            children.push(new Paragraph({ children: currentParagraphChildren }));
+                            currentParagraphChildren = [];
+                        }
+                        children.push(new Paragraph({ children: [] }));
+                        continue;
+                    }
+                    if (token.type === 'word' && state.selectedWords.has(i)) {
+                        const imageData = imageCache.get(state.pictos.get(token.value.toLowerCase()));
+                        if (imageData) {
+                            currentParagraphChildren.push(new ImageRun({ data: imageData, transformation: { width: state.pictoSize, height: state.pictoSize } }));
+                            currentParagraphChildren.push(new TextRun({ text: `(${token.value}) `, size: 18, color: '666666' }));
+                        } else {
+                            currentParagraphChildren.push(new TextRun({ text: token.value + ' ', italics: true, color: '666666' }));
+                        }
+                    } else {
+                        currentParagraphChildren.push(new TextRun({ text: token.type === 'word' ? token.value + ' ' : token.value, size: 24 }));
+                    }
+                }
+                if (currentParagraphChildren.length > 0) children.push(new Paragraph({ children: currentParagraphChildren }));
+
+                const doc = new Document({ sections: [{ children }] });
+                const blob = await Packer.toBlob(doc);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'actividad-con-pictos.docx';
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('Documento descargado', 'success');
+            } catch (error) {
+                showToast('Error al generar el documento', 'error');
+            }
+        }
+
+        // Exportar a PDF
+        function downloadPdf() {
+            try {
+                alert('Para un PDF limpio:\n\n1. Pulsa "Más opciones"\n2. Desmarca "Encabezados y pies de página"\n3. Selecciona "Guardar como PDF"');
+                const printContainer = document.createElement('div');
+                printContainer.id = 'printContainer';
+                printContainer.innerHTML = elements.previewDocument.innerHTML;
+                document.body.appendChild(printContainer);
+                const cleanup = () => { printContainer.remove(); window.removeEventListener('afterprint', cleanup); };
+                window.addEventListener('afterprint', cleanup);
+                window.print();
+            } catch (error) {
+                showToast('Error al abrir el diálogo de impresión', 'error');
+            }
+        }
+
+        // Navegación entre pasos
+        function showStep(step) {
+            [elements.step1, elements.step2, elements.step3].forEach(s => s.classList.add('hidden'));
+            [elements.stepDot1, elements.stepDot2, elements.stepDot3].forEach((d, i) => {
+                d.classList.remove('active', 'completed');
+                if (i + 1 < step) d.classList.add('completed');
+                if (i + 1 === step) d.classList.add('active');
+            });
+            if (step === 1) elements.step1.classList.remove('hidden');
+            if (step === 2) elements.step2.classList.remove('hidden');
+            if (step === 3) elements.step3.classList.remove('hidden');
+        }
+
+        function loadText() {
+            const text = elements.textInput.value.trim();
+            if (!text) { showToast('Introduce o carga un texto', 'error'); return; }
+            state.text = text;
+            state.tokens = tokenizeText(text);
+            state.selectedWords.clear();
+            showStep(2);
+            renderWords();
+        }
+
+        // Modal de configuración
+        function openSettings() {
+            elements.settingsModal.classList.add('visible');
+            document.querySelectorAll('input[name="pictoSize"]').forEach(r => r.checked = parseInt(r.value) === state.pictoSize);
+        }
+
+        function closeSettings() { elements.settingsModal.classList.remove('visible'); }
+
+        function saveSettings() {
+            const selected = document.querySelector('input[name="pictoSize"]:checked');
+            if (selected) {
+                state.pictoSize = parseInt(selected.value);
+                localStorage.setItem('pictoSize', state.pictoSize);
+                if (!elements.previewContainer.classList.contains('hidden')) renderPreview();
+            }
+            closeSettings();
+            showToast('Configuración guardada', 'success');
+        }
+
+        // Event Listeners
+        elements.themeToggle.addEventListener('click', toggleTheme);
+        elements.dropzone.addEventListener('click', () => elements.fileInput.click());
+        elements.fileInput.addEventListener('change', e => e.target.files.length && loadDocxFile(e.target.files[0]));
+        elements.dropzone.addEventListener('dragover', e => { e.preventDefault(); elements.dropzone.classList.add('dragover'); });
+        elements.dropzone.addEventListener('dragleave', () => elements.dropzone.classList.remove('dragover'));
+        elements.dropzone.addEventListener('drop', e => {
+            e.preventDefault();
+            elements.dropzone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                const file = e.dataTransfer.files[0];
+                file.name.endsWith('.docx') ? loadDocxFile(file) : showToast('Solo archivos .docx', 'error');
+            }
+        });
+
+        elements.loadTextBtn.addEventListener('click', loadText);
+        elements.backToStep1Btn.addEventListener('click', () => showStep(1));
+        elements.backToStep2Btn.addEventListener('click', () => showStep(2));
+        elements.selectAllBtn.addEventListener('click', selectAllWords);
+        elements.convertBtn.addEventListener('click', convertToPictos);
+        elements.downloadDocxBtn.addEventListener('click', downloadDocx);
+        elements.downloadPdfBtn.addEventListener('click', downloadPdf);
+        elements.settingsBtn.addEventListener('click', openSettings);
+        elements.closeModalBtn.addEventListener('click', closeSettings);
+        elements.cancelSettingsBtn.addEventListener('click', closeSettings);
+        elements.saveSettingsBtn.addEventListener('click', saveSettings);
+        document.addEventListener('keydown', e => e.key === 'Escape' && elements.settingsModal.classList.contains('visible') && closeSettings());
+        elements.settingsModal.addEventListener('click', e => e.target === elements.settingsModal && closeSettings());
+
+        // Inicialización
+        updateThemeIcons();
+    </script>
+</body>
+</html>

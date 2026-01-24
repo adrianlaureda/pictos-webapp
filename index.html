@@ -479,6 +479,109 @@
             opacity: 1;
         }
 
+        /* Botón de cambiar picto */
+        .picto-container {
+            position: relative;
+        }
+
+        .picto-change-btn {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 22px;
+            height: 22px;
+            padding: 0;
+            border: 2px solid white;
+            border-radius: 50%;
+            background: #f59e0b;
+            color: #0a0a0a;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.7;
+            transition: all 0.2s;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .picto-container:hover .picto-change-btn {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        /* Modal de alternativas */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: var(--bg-elevated);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .modal-header h3 {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .modal-header span {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .alternatives-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.75rem;
+        }
+
+        .alt-picto {
+            padding: 0.5rem;
+            border: 2px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .alt-picto:hover {
+            border-color: var(--accent);
+        }
+
+        .alt-picto.selected {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+        }
+
+        .alt-picto img {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: contain;
+        }
+
         /* Loading state */
         .loading-state {
             text-align: center;
@@ -941,14 +1044,33 @@
     <!-- Toast -->
     <div id="toast" class="toast"></div>
 
+    <!-- Modal de alternativas de pictos -->
+    <div id="alternativesModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Elige pictograma para: <span id="alternativesWord"></span></h3>
+                <button class="btn btn-icon btn-ghost" onclick="closeAlternativesModal()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div id="alternativesGrid" class="alternatives-grid"></div>
+        </div>
+    </div>
+
     <script>
+        // Configuración API de lematización (Render)
+        const LEMMATIZER_API = 'https://spacy-lemmatizer-r1t5.onrender.com';
+
         // Estado global
         const state = {
             text: '',
             tokens: [],
             selectedWords: new Set(),
-            pictos: new Map(),
+            pictos: new Map(),           // word -> { url, alternatives: [{id, url}] }
             translations: new Map(),
+            lemmas: new Map(),           // word -> lemma (del servidor SpaCy)
             pictoSize: parseInt(localStorage.getItem('pictoSize') || '60'),
             darkMode: localStorage.getItem('darkMode') !== 'false'
         };
@@ -1036,74 +1158,627 @@
             return tokens;
         }
 
-        // Diccionario gallego-español
+        // ═══════════════════════════════════════════════════════════════
+        // NORMALIZADOR DE PALABRAS PARA ARASAAC
+        // Convierte cualquier palabra a su forma de diccionario
+        // ═══════════════════════════════════════════════════════════════
+
+        // Diccionario gallego → español (sustantivos, adjetivos, adverbios)
         const gallegoEspanol = {
+            // Personas
             'neno': 'niño', 'nena': 'niña', 'nenos': 'niños', 'nenas': 'niñas',
-            'can': 'perro', 'gato': 'gato', 'casa': 'casa',
-            'auga': 'agua', 'leite': 'leche', 'pan': 'pan',
-            'comer': 'comer', 'beber': 'beber', 'durmir': 'dormir',
-            'xogar': 'jugar', 'correr': 'correr', 'andar': 'andar',
-            'falar': 'hablar', 'escoitar': 'escuchar', 'mirar': 'mirar',
-            'libro': 'libro', 'caderno': 'cuaderno', 'lapis': 'lápiz',
-            'escola': 'escuela', 'clase': 'clase', 'mestre': 'maestro',
-            'pai': 'padre', 'nai': 'madre', 'irmán': 'hermano', 'irmá': 'hermana',
-            'avó': 'abuelo', 'avoa': 'abuela',
-            'grande': 'grande', 'pequeno': 'pequeño', 'bo': 'bueno', 'malo': 'malo',
-            'branco': 'blanco', 'negro': 'negro', 'vermello': 'rojo', 'azul': 'azul',
-            'verde': 'verde', 'amarelo': 'amarillo',
-            'hoxe': 'hoy', 'mañá': 'mañana', 'onte': 'ayer',
-            'si': 'sí', 'non': 'no', 'e': 'y', 'ou': 'o',
-            'un': 'un', 'unha': 'una', 'o': 'el', 'a': 'la',
-            'mazá': 'manzana', 'laranxa': 'naranja', 'pera': 'pera',
-            'mesa': 'mesa', 'cadeira': 'silla', 'porta': 'puerta', 'ventá': 'ventana',
+            'home': 'hombre', 'muller': 'mujer', 'persoa': 'persona',
+            'pai': 'padre', 'nai': 'madre', 'fillo': 'hijo', 'filla': 'hija', 'fillos': 'hijos', 'fillas': 'hijas',
+            'irmán': 'hermano', 'irmá': 'hermana', 'avó': 'abuelo', 'avoa': 'abuela',
+            'tío': 'tío', 'tía': 'tía', 'primo': 'primo', 'prima': 'prima',
+            'mestre': 'maestro', 'mestra': 'maestra', 'alumno': 'alumno', 'alumna': 'alumna',
+            'amigo': 'amigo', 'amiga': 'amiga', 'veciño': 'vecino', 'veciña': 'vecina',
+
+            // Animales
+            'can': 'perro', 'gato': 'gato', 'paxaro': 'pájaro', 'peixe': 'pez',
+            'vaca': 'vaca', 'cabalo': 'caballo', 'porco': 'cerdo', 'galiña': 'gallina',
+            'ovella': 'oveja', 'rato': 'ratón', 'coello': 'conejo',
+
+            // Comida
+            'auga': 'agua', 'leite': 'leche', 'pan': 'pan', 'carne': 'carne',
+            'mazá': 'manzana', 'laranxa': 'naranja', 'pera': 'pera', 'uva': 'uva',
+            'queixo': 'queso', 'ovo': 'huevo', 'arroz': 'arroz', 'pataca': 'patata',
+            'verdura': 'verdura', 'froita': 'fruta', 'peixe': 'pescado',
+            'xeado': 'helado', 'doce': 'dulce', 'torta': 'tarta',
+
+            // Casa y objetos
+            'casa': 'casa', 'cuarto': 'habitación', 'cociña': 'cocina', 'baño': 'baño',
+            'porta': 'puerta', 'ventá': 'ventana', 'cadeira': 'silla', 'mesa': 'mesa',
+            'cama': 'cama', 'sofá': 'sofá', 'televisión': 'televisión',
+            'teléfono': 'teléfono', 'ordenador': 'ordenador', 'libro': 'libro',
+            'caderno': 'cuaderno', 'lapis': 'lápiz', 'bolígrafo': 'bolígrafo',
+            'xoguete': 'juguete', 'boneca': 'muñeca', 'pelota': 'pelota',
+
+            // Escuela
+            'escola': 'escuela', 'clase': 'clase', 'aula': 'aula',
+            'recreo': 'recreo', 'deberes': 'deberes', 'exame': 'examen',
+
+            // Naturaleza
             'sol': 'sol', 'lúa': 'luna', 'estrela': 'estrella', 'ceo': 'cielo',
-            'árbore': 'árbol', 'flor': 'flor', 'herba': 'hierba',
-            'peixe': 'pez', 'paxaro': 'pájaro', 'vaca': 'vaca', 'cabalo': 'caballo'
+            'nube': 'nube', 'choiva': 'lluvia', 'neve': 'nieve', 'vento': 'viento',
+            'árbore': 'árbol', 'flor': 'flor', 'herba': 'hierba', 'folla': 'hoja',
+            'río': 'río', 'mar': 'mar', 'praia': 'playa', 'monte': 'montaña',
+
+            // Colores
+            'branco': 'blanco', 'negro': 'negro', 'vermello': 'rojo', 'azul': 'azul',
+            'verde': 'verde', 'amarelo': 'amarillo', 'laranxa': 'naranja', 'rosa': 'rosa',
+            'marrón': 'marrón', 'gris': 'gris', 'violeta': 'violeta',
+
+            // Adjetivos
+            'grande': 'grande', 'pequeno': 'pequeño', 'alto': 'alto', 'baixo': 'bajo',
+            'bo': 'bueno', 'malo': 'malo', 'bonito': 'bonito', 'feo': 'feo',
+            'novo': 'nuevo', 'vello': 'viejo', 'quente': 'caliente', 'frío': 'frío',
+            'limpo': 'limpio', 'sucio': 'sucio', 'rápido': 'rápido', 'lento': 'lento',
+            'feliz': 'feliz', 'triste': 'triste', 'contento': 'contento', 'enfadado': 'enfadado',
+
+            // Tiempo y lugar
+            'hoxe': 'hoy', 'mañá': 'mañana', 'onte': 'ayer', 'agora': 'ahora',
+            'sempre': 'siempre', 'nunca': 'nunca', 'despois': 'después', 'antes': 'antes',
+            'aquí': 'aquí', 'alí': 'allí', 'lonxe': 'lejos', 'preto': 'cerca',
+
+            // Otros
+            'si': 'sí', 'non': 'no', 'e': 'y', 'ou': 'o', 'con': 'con', 'sen': 'sin',
+            'un': 'un', 'unha': 'una', 'o': 'el', 'a': 'la', 'os': 'los', 'as': 'las',
+            'este': 'este', 'esta': 'esta', 'ese': 'ese', 'esa': 'esa',
+            'moito': 'mucho', 'pouco': 'poco', 'todo': 'todo', 'nada': 'nada',
+            // Palabras problemáticas por subcadenas
+            'onte': 'ayer', 'porque': 'porque',
+            // Pronombres gallegos (críticos - evitar falsos positivos)
+            'eu': 'yo', 'ti': 'tú', 'el': 'él', 'ela': 'ella',
+            'nós': 'nosotros', 'vós': 'vosotros', 'eles': 'ellos', 'elas': 'ellas',
+            'me': 'me', 'che': 'te', 'lle': 'le', 'nos': 'nos', 'lles': 'les',
+            'meu': 'mío', 'teu': 'tuyo', 'seu': 'suyo',
+            'miña': 'mía', 'túa': 'tuya', 'súa': 'suya',
+            'meus': 'míos', 'teus': 'tuyos', 'seus': 'suyos',
+            'miñas': 'mías', 'túas': 'tuyas', 'súas': 'suyas',
+            // Contracciones gallegas
+            'do': 'del', 'da': 'de la', 'dos': 'de los', 'das': 'de las',
+            'ao': 'al', 'á': 'a la', 'aos': 'a los', 'ás': 'a las',
+            'no': 'en el', 'na': 'en la', 'nos': 'en los', 'nas': 'en las',
+            'co': 'con el', 'coa': 'con la', 'cos': 'con los', 'coas': 'con las',
+            'polo': 'por el', 'pola': 'por la', 'polos': 'por los', 'polas': 'por las',
+            // Adverbios y otros
+            'mesmo': 'mismo', 'mesma': 'misma', 'tamén': 'también',
+            'así': 'así', 'ben': 'bien', 'mal': 'mal', 'máis': 'más', 'menos': 'menos'
         };
 
-        // Buscar picto en API
-        async function searchPictoAPI(word) {
-            try {
-                const url = `https://symbotalkapiv1.azurewebsites.net/search/?name=${encodeURIComponent(word)}&lang=es&repo=arasaac&limit=3`;
-                const response = await fetch(url);
-                if (!response.ok) return null;
-                const data = await response.json();
-                return data?.[0]?.image_url || null;
-            } catch { return null; }
+        // Verbos gallegos de emociones y acciones comunes
+        const verbosGallegoAdicionales = {
+            // Chorar (llorar)
+            'choro': 'llorar', 'choras': 'llorar', 'chora': 'llorar', 'choramos': 'llorar', 'choran': 'llorar',
+            'chorei': 'llorar', 'choraches': 'llorar', 'chorou': 'llorar', 'choramos': 'llorar', 'choraron': 'llorar',
+            'chorar': 'llorar',
+            // Rir (reír)
+            'río': 'reír', 'ris': 'reír', 'ri': 'reír', 'rimos': 'reír', 'rin': 'reír',
+            'rin': 'reír', 'riches': 'reír', 'riu': 'reír', 'riron': 'reír', 'rir': 'reír',
+            // Cantar
+            'canto': 'cantar', 'cantas': 'cantar', 'canta': 'cantar', 'cantamos': 'cantar', 'cantan': 'cantar',
+            'cantei': 'cantar', 'cantou': 'cantar', 'cantaron': 'cantar',
+            // Bailar
+            'bailo': 'bailar', 'bailas': 'bailar', 'baila': 'bailar', 'bailamos': 'bailar', 'bailan': 'bailar',
+            'bailei': 'bailar', 'bailou': 'bailar', 'bailaron': 'bailar',
+            // Pintar
+            'pinto': 'pintar', 'pintas': 'pintar', 'pinta': 'pintar', 'pintamos': 'pintar', 'pintan': 'pintar',
+            'pintei': 'pintar', 'pintou': 'pintar', 'pintaron': 'pintar',
+            // Debuxar (dibujar)
+            'debuxo': 'dibujar', 'debuxas': 'dibujar', 'debuxa': 'dibujar', 'debuxamos': 'dibujar', 'debuxan': 'dibujar',
+            'debuxei': 'dibujar', 'debuxou': 'dibujar', 'debuxaron': 'dibujar', 'debuxar': 'dibujar',
+            // Nadar
+            'nado': 'nadar', 'nadas': 'nadar', 'nada': 'nadar', 'nadamos': 'nadar', 'nadan': 'nadar',
+            'nadei': 'nadar', 'nadou': 'nadar', 'nadaron': 'nadar',
+            // Saltar
+            'salto': 'saltar', 'saltas': 'saltar', 'salta': 'saltar', 'saltamos': 'saltar', 'saltan': 'saltar',
+            'saltei': 'saltar', 'saltou': 'saltar', 'saltaron': 'saltar',
+            // Traballar (trabajar)
+            'traballo': 'trabajar', 'traballes': 'trabajar', 'traballa': 'trabajar', 'traballamos': 'trabajar', 'traballan': 'trabajar',
+            'trabellei': 'trabajar', 'trabellou': 'trabajar', 'traballar': 'trabajar',
+            // Estudar (estudiar)
+            'estudo': 'estudiar', 'estudas': 'estudiar', 'estuda': 'estudiar', 'estudamos': 'estudiar', 'estudan': 'estudiar',
+            'estudei': 'estudiar', 'estudou': 'estudiar', 'estudar': 'estudiar',
+            // Aprender
+            'aprendo': 'aprender', 'aprendes': 'aprender', 'aprende': 'aprender', 'aprendemos': 'aprender', 'aprenden': 'aprender',
+            'aprendín': 'aprender', 'aprendeu': 'aprender', 'aprenderon': 'aprender'
+        };
+
+        // Diccionario de verbos gallegos conjugados → español infinitivo
+        const verbosGallegoInfinitivo = {
+            // Comer (gallego)
+            'como': 'comer', 'comes': 'comer', 'come': 'comer', 'comemos': 'comer', 'comedes': 'comer', 'comen': 'comer',
+            'comía': 'comer', 'comías': 'comer', 'comiamos': 'comer', 'comiades': 'comer', 'comían': 'comer',
+            'comín': 'comer', 'comiches': 'comer', 'comeu': 'comer', 'comemos': 'comer', 'comestes': 'comer', 'comeron': 'comer',
+
+            // Beber (gallego)
+            'bebo': 'beber', 'bebes': 'beber', 'bebe': 'beber', 'bebemos': 'beber', 'bebedes': 'beber', 'beben': 'beber',
+            'bebeu': 'beber', 'beberon': 'beber',
+
+            // Durmir (gallego → dormir español)
+            'durmo': 'dormir', 'durmes': 'dormir', 'durme': 'dormir', 'durmimos': 'dormir', 'durmides': 'dormir', 'durmen': 'dormir',
+            'durmiu': 'dormir', 'durmiron': 'dormir', 'durmir': 'dormir',
+
+            // Xogar (gallego → jugar español) - incluye gerundio
+            'xogo': 'jugar', 'xogas': 'jugar', 'xoga': 'jugar', 'xogamos': 'jugar', 'xogades': 'jugar', 'xogan': 'jugar',
+            'xogou': 'jugar', 'xogaron': 'jugar', 'xogar': 'jugar', 'xogando': 'jugar', 'xogado': 'jugar',
+
+            // Falar (gallego → hablar español)
+            'falo': 'hablar', 'falas': 'hablar', 'fala': 'hablar', 'falamos': 'hablar', 'falades': 'hablar', 'falan': 'hablar',
+            'falou': 'hablar', 'falaron': 'hablar', 'falar': 'hablar',
+
+            // Andar/Camiñar (gallego → caminar español)
+            'camiño': 'caminar', 'camiñas': 'caminar', 'camiña': 'caminar', 'camiñamos': 'caminar', 'camiñan': 'caminar',
+            'camiñou': 'caminar', 'camiñaron': 'caminar', 'camiñar': 'caminar',
+
+            // Escoitar (gallego → escuchar español)
+            'escoito': 'escuchar', 'escoitas': 'escuchar', 'escoita': 'escuchar', 'escoitamos': 'escuchar', 'escoitan': 'escuchar',
+            'escoitou': 'escuchar', 'escoitaron': 'escuchar', 'escoitar': 'escuchar',
+
+            // Mirar/Ver (gallego)
+            'miro': 'mirar', 'miras': 'mirar', 'mira': 'mirar', 'miramos': 'mirar', 'miran': 'mirar',
+            'mirou': 'mirar', 'miraron': 'mirar',
+            'vexo': 'ver', 'ves': 'ver', 've': 'ver', 'vemos': 'ver', 'ven': 'ver',
+            'viu': 'ver', 'viron': 'ver',
+
+            // Ir (gallego)
+            'vou': 'ir', 'vas': 'ir', 'vai': 'ir', 'imos': 'ir', 'ides': 'ir', 'van': 'ir',
+            'fun': 'ir', 'fuches': 'ir', 'foi': 'ir', 'fomos': 'ir', 'fostes': 'ir', 'foron': 'ir',
+
+            // Ter (gallego → tener español)
+            'teño': 'tener', 'tes': 'tener', 'ten': 'tener', 'temos': 'tener', 'tendes': 'tener', 'teñen': 'tener',
+            'tiven': 'tener', 'tiveches': 'tener', 'tivo': 'tener', 'tivemos': 'tener', 'ter': 'tener',
+
+            // Facer (gallego → hacer español)
+            'fago': 'hacer', 'fas': 'hacer', 'fai': 'hacer', 'facemos': 'hacer', 'facedes': 'hacer', 'fan': 'hacer',
+            'fixen': 'hacer', 'fixeches': 'hacer', 'fixo': 'hacer', 'fixemos': 'hacer', 'facer': 'hacer',
+
+            // Querer (gallego)
+            'quero': 'querer', 'queres': 'querer', 'quere': 'querer', 'queremos': 'querer', 'queren': 'querer',
+            'quixen': 'querer', 'quixo': 'querer', 'quixeron': 'querer',
+
+            // Poder (gallego)
+            'podo': 'poder', 'podes': 'poder', 'pode': 'poder', 'podemos': 'poder', 'poden': 'poder',
+            'puiden': 'poder', 'puido': 'poder', 'puideron': 'poder',
+
+            // Saber (gallego)
+            'sei': 'saber', 'sabes': 'saber', 'sabe': 'saber', 'sabemos': 'saber', 'saben': 'saber',
+            'souben': 'saber', 'soubo': 'saber', 'souberon': 'saber'
+        };
+
+        // Diccionario de verbos españoles conjugados → infinitivo
+        const verbosEspanolInfinitivo = {
+            // Comer
+            'como': 'comer', 'comes': 'comer', 'come': 'comer', 'comemos': 'comer', 'coméis': 'comer', 'comen': 'comer',
+            'comía': 'comer', 'comías': 'comer', 'comíamos': 'comer', 'comíais': 'comer', 'comían': 'comer',
+            'comí': 'comer', 'comiste': 'comer', 'comió': 'comer', 'comisteis': 'comer', 'comieron': 'comer',
+            'comeré': 'comer', 'comerás': 'comer', 'comerá': 'comer', 'comeremos': 'comer', 'comerán': 'comer',
+            'comería': 'comer', 'comerías': 'comer', 'comeríamos': 'comer', 'comerían': 'comer',
+            'coma': 'comer', 'comas': 'comer', 'comamos': 'comer', 'coman': 'comer',
+            'comiendo': 'comer', 'comido': 'comer',
+
+            // Beber
+            'bebo': 'beber', 'bebes': 'beber', 'bebe': 'beber', 'bebemos': 'beber', 'bebéis': 'beber', 'beben': 'beber',
+            'bebía': 'beber', 'bebí': 'beber', 'bebiste': 'beber', 'bebió': 'beber', 'bebieron': 'beber',
+            'beberé': 'beber', 'beberá': 'beber', 'beberán': 'beber',
+            'bebiendo': 'beber', 'bebido': 'beber',
+
+            // Dormir
+            'duermo': 'dormir', 'duermes': 'dormir', 'duerme': 'dormir', 'dormimos': 'dormir', 'dormís': 'dormir', 'duermen': 'dormir',
+            'dormía': 'dormir', 'dormí': 'dormir', 'dormiste': 'dormir', 'durmió': 'dormir', 'durmieron': 'dormir',
+            'dormiré': 'dormir', 'dormirá': 'dormir', 'dormirán': 'dormir',
+            'durmiendo': 'dormir', 'dormido': 'dormir',
+
+            // Jugar (incluye todas las formas)
+            'juego': 'jugar', 'juegas': 'jugar', 'juega': 'jugar', 'jugamos': 'jugar', 'jugáis': 'jugar', 'juegan': 'jugar',
+            'jugaba': 'jugar', 'jugabas': 'jugar', 'jugábamos': 'jugar', 'jugaban': 'jugar',
+            'jugué': 'jugar', 'jugaste': 'jugar', 'jugó': 'jugar', 'jugaron': 'jugar',
+            'jugaré': 'jugar', 'jugarás': 'jugar', 'jugará': 'jugar', 'jugaremos': 'jugar', 'jugarán': 'jugar',
+            'jugaría': 'jugar', 'jugarías': 'jugar', 'jugaríamos': 'jugar', 'jugarían': 'jugar',
+            'jugando': 'jugar', 'jugado': 'jugar',
+
+            // Hablar
+            'hablo': 'hablar', 'hablas': 'hablar', 'habla': 'hablar', 'hablamos': 'hablar', 'habláis': 'hablar', 'hablan': 'hablar',
+            'hablaba': 'hablar', 'hablé': 'hablar', 'hablaste': 'hablar', 'habló': 'hablar', 'hablaron': 'hablar',
+            'hablaré': 'hablar', 'hablará': 'hablar', 'hablarán': 'hablar',
+            'hablando': 'hablar', 'hablado': 'hablar',
+
+            // Caminar
+            'camino': 'caminar', 'caminas': 'caminar', 'camina': 'caminar', 'caminamos': 'caminar', 'caminan': 'caminar',
+            'caminaba': 'caminar', 'caminé': 'caminar', 'caminó': 'caminar', 'caminaron': 'caminar',
+            'caminando': 'caminar', 'caminado': 'caminar',
+
+            // Escuchar
+            'escucho': 'escuchar', 'escuchas': 'escuchar', 'escucha': 'escuchar', 'escuchamos': 'escuchar', 'escuchan': 'escuchar',
+            'escuchaba': 'escuchar', 'escuché': 'escuchar', 'escuchó': 'escuchar', 'escucharon': 'escuchar',
+            'escuchando': 'escuchar', 'escuchado': 'escuchar',
+
+            // Mirar
+            'miro': 'mirar', 'miras': 'mirar', 'mira': 'mirar', 'miramos': 'mirar', 'miran': 'mirar',
+            'miraba': 'mirar', 'miré': 'mirar', 'miró': 'mirar', 'miraron': 'mirar',
+            'mirando': 'mirar', 'mirado': 'mirar',
+
+            // Ver
+            'veo': 'ver', 'ves': 'ver', 've': 'ver', 'vemos': 'ver', 'veis': 'ver', 'ven': 'ver',
+            'veía': 'ver', 'vi': 'ver', 'viste': 'ver', 'vio': 'ver', 'vieron': 'ver',
+            'veré': 'ver', 'verá': 'ver', 'verán': 'ver',
+            'viendo': 'ver', 'visto': 'ver',
+
+            // Ir
+            'voy': 'ir', 'vas': 'ir', 'va': 'ir', 'vamos': 'ir', 'vais': 'ir', 'van': 'ir',
+            'iba': 'ir', 'fui': 'ir', 'fuiste': 'ir', 'fue': 'ir', 'fuimos': 'ir', 'fueron': 'ir',
+            'iré': 'ir', 'irá': 'ir', 'irán': 'ir',
+            'yendo': 'ir', 'ido': 'ir',
+
+            // Tener
+            'tengo': 'tener', 'tienes': 'tener', 'tiene': 'tener', 'tenemos': 'tener', 'tenéis': 'tener', 'tienen': 'tener',
+            'tenía': 'tener', 'tuve': 'tener', 'tuviste': 'tener', 'tuvo': 'tener', 'tuvieron': 'tener',
+            'tendré': 'tener', 'tendrá': 'tener', 'tendrán': 'tener',
+            'teniendo': 'tener', 'tenido': 'tener',
+
+            // Hacer
+            'hago': 'hacer', 'haces': 'hacer', 'hace': 'hacer', 'hacemos': 'hacer', 'hacéis': 'hacer', 'hacen': 'hacer',
+            'hacía': 'hacer', 'hice': 'hacer', 'hiciste': 'hacer', 'hizo': 'hacer', 'hicieron': 'hacer',
+            'haré': 'hacer', 'hará': 'hacer', 'harán': 'hacer',
+            'haciendo': 'hacer', 'hecho': 'hacer',
+
+            // Ser
+            'soy': 'ser', 'eres': 'ser', 'es': 'ser', 'somos': 'ser', 'sois': 'ser', 'son': 'ser',
+            'era': 'ser', 'fui': 'ser', 'fue': 'ser', 'fueron': 'ser',
+            'seré': 'ser', 'será': 'ser', 'serán': 'ser',
+            'siendo': 'ser', 'sido': 'ser',
+
+            // Estar
+            'estoy': 'estar', 'estás': 'estar', 'está': 'estar', 'estamos': 'estar', 'están': 'estar',
+            'estaba': 'estar', 'estuve': 'estar', 'estuvo': 'estar', 'estuvieron': 'estar',
+            'estaré': 'estar', 'estará': 'estar', 'estarán': 'estar',
+            'estando': 'estar', 'estado': 'estar',
+
+            // Querer
+            'quiero': 'querer', 'quieres': 'querer', 'quiere': 'querer', 'queremos': 'querer', 'quieren': 'querer',
+            'quería': 'querer', 'quise': 'querer', 'quiso': 'querer', 'quisieron': 'querer',
+            'querré': 'querer', 'querrá': 'querer', 'querrán': 'querer',
+            'queriendo': 'querer', 'querido': 'querer',
+
+            // Poder
+            'puedo': 'poder', 'puedes': 'poder', 'puede': 'poder', 'podemos': 'poder', 'pueden': 'poder',
+            'podía': 'poder', 'pude': 'poder', 'pudo': 'poder', 'pudieron': 'poder',
+            'podré': 'poder', 'podrá': 'poder', 'podrán': 'poder',
+            'pudiendo': 'poder', 'podido': 'poder',
+
+            // Saber
+            'sé': 'saber', 'sabes': 'saber', 'sabe': 'saber', 'sabemos': 'saber', 'saben': 'saber',
+            'sabía': 'saber', 'supe': 'saber', 'supo': 'saber', 'supieron': 'saber',
+            'sabré': 'saber', 'sabrá': 'saber', 'sabrán': 'saber',
+            'sabiendo': 'saber', 'sabido': 'saber',
+
+            // Dar
+            'doy': 'dar', 'das': 'dar', 'da': 'dar', 'damos': 'dar', 'dan': 'dar',
+            'daba': 'dar', 'di': 'dar', 'diste': 'dar', 'dio': 'dar', 'dieron': 'dar',
+            'daré': 'dar', 'dará': 'dar', 'darán': 'dar',
+            'dando': 'dar', 'dado': 'dar',
+
+            // Leer
+            'leo': 'leer', 'lees': 'leer', 'lee': 'leer', 'leemos': 'leer', 'leen': 'leer',
+            'leía': 'leer', 'leí': 'leer', 'leyó': 'leer', 'leyeron': 'leer',
+            'leeré': 'leer', 'leerá': 'leer', 'leerán': 'leer',
+            'leyendo': 'leer', 'leído': 'leer',
+
+            // Escribir
+            'escribo': 'escribir', 'escribes': 'escribir', 'escribe': 'escribir', 'escribimos': 'escribir', 'escriben': 'escribir',
+            'escribía': 'escribir', 'escribí': 'escribir', 'escribió': 'escribir', 'escribieron': 'escribir',
+            'escribiré': 'escribir', 'escribirá': 'escribir', 'escribirán': 'escribir',
+            'escribiendo': 'escribir', 'escrito': 'escribir',
+
+            // Correr
+            'corro': 'correr', 'corres': 'correr', 'corre': 'correr', 'corremos': 'correr', 'corren': 'correr',
+            'corría': 'correr', 'corrí': 'correr', 'corrió': 'correr', 'corrieron': 'correr',
+            'correré': 'correr', 'correrá': 'correr', 'correrán': 'correr',
+            'corriendo': 'correr', 'corrido': 'correr',
+
+            // Salir
+            'salgo': 'salir', 'sales': 'salir', 'sale': 'salir', 'salimos': 'salir', 'salen': 'salir',
+            'salía': 'salir', 'salí': 'salir', 'salió': 'salir', 'salieron': 'salir',
+            'saldré': 'salir', 'saldrá': 'salir', 'saldrán': 'salir',
+            'saliendo': 'salir', 'salido': 'salir',
+
+            // Venir
+            'vengo': 'venir', 'vienes': 'venir', 'viene': 'venir', 'venimos': 'venir', 'vienen': 'venir',
+            'venía': 'venir', 'vine': 'venir', 'vino': 'venir', 'vinieron': 'venir',
+            'vendré': 'venir', 'vendrá': 'venir', 'vendrán': 'venir',
+            'viniendo': 'venir', 'venido': 'venir',
+
+            // Decir
+            'digo': 'decir', 'dices': 'decir', 'dice': 'decir', 'decimos': 'decir', 'dicen': 'decir',
+            'decía': 'decir', 'dije': 'decir', 'dijo': 'decir', 'dijeron': 'decir',
+            'diré': 'decir', 'dirá': 'decir', 'dirán': 'decir',
+            'diciendo': 'decir', 'dicho': 'decir',
+
+            // Poner
+            'pongo': 'poner', 'pones': 'poner', 'pone': 'poner', 'ponemos': 'poner', 'ponen': 'poner',
+            'ponía': 'poner', 'puse': 'poner', 'puso': 'poner', 'pusieron': 'poner',
+            'pondré': 'poner', 'pondrá': 'poner', 'pondrán': 'poner',
+            'poniendo': 'poner', 'puesto': 'poner',
+
+            // Llevar
+            'llevo': 'llevar', 'llevas': 'llevar', 'lleva': 'llevar', 'llevamos': 'llevar', 'llevan': 'llevar',
+            'llevaba': 'llevar', 'llevé': 'llevar', 'llevó': 'llevar', 'llevaron': 'llevar',
+            'llevaré': 'llevar', 'llevará': 'llevar', 'llevarán': 'llevar',
+            'llevando': 'llevar', 'llevado': 'llevar',
+
+            // Traer
+            'traigo': 'traer', 'traes': 'traer', 'trae': 'traer', 'traemos': 'traer', 'traen': 'traer',
+            'traía': 'traer', 'traje': 'traer', 'trajo': 'traer', 'trajeron': 'traer',
+            'traeré': 'traer', 'traerá': 'traer', 'traerán': 'traer',
+            'trayendo': 'traer', 'traído': 'traer'
+        };
+
+        // Función para convertir plural a singular (español y gallego)
+        function singularizar(palabra) {
+            const word = palabra.toLowerCase();
+
+            // Casos especiales
+            const irregulares = {
+                'macarrones': 'macarrón', 'macarróns': 'macarrón',
+                'pantalones': 'pantalón', 'pantalóns': 'pantalón',
+                'calcetines': 'calcetín', 'calcetíns': 'calcetín',
+                'ratones': 'ratón', 'ratóns': 'ratón',
+                'aviones': 'avión', 'avións': 'avión',
+                'lápices': 'lápiz', 'nueces': 'nuez', 'peces': 'pez',
+                'luces': 'luz', 'voces': 'voz', 'cruces': 'cruz',
+                'países': 'país', 'cafés': 'café',
+                'niños': 'niño', 'niñas': 'niña',
+                'nenos': 'niño', 'nenas': 'niña', // gallego
+                'fillos': 'hijo', 'fillas': 'hija', // gallego
+                'hijos': 'hijo', 'hijas': 'hija',
+                'padres': 'padre', 'madres': 'madre',
+                'hermanos': 'hermano', 'hermanas': 'hermana',
+                'irmáns': 'hermano', 'irmás': 'hermana', // gallego
+                'amigos': 'amigo', 'amigas': 'amiga',
+                'libros': 'libro', 'mesas': 'mesa', 'sillas': 'silla',
+                'casas': 'casa', 'puertas': 'puerta', 'ventanas': 'ventana',
+                'árboles': 'árbol', 'flores': 'flor',
+                'perros': 'perro', 'gatos': 'gato', 'pájaros': 'pájaro',
+                'coches': 'coche', 'trenes': 'tren',
+                'días': 'día', 'noches': 'noche',
+                'ojos': 'ojo', 'manos': 'mano', 'pies': 'pie',
+                'dientes': 'diente', 'dedos': 'dedo'
+            };
+
+            if (irregulares[word]) return irregulares[word];
+
+            // Reglas de singularización
+            // Gallego: -óns → -ón, -áns → -án, -íns → -ín
+            if (word.endsWith('óns')) return word.slice(0, -3) + 'ón';
+            if (word.endsWith('áns')) return word.slice(0, -3) + 'án';
+            if (word.endsWith('íns')) return word.slice(0, -3) + 'ín';
+            if (word.endsWith('úns')) return word.slice(0, -3) + 'ún';
+
+            // Español: -ones → -ón, -anes → -án, -ines → -ín
+            if (word.endsWith('ones')) return word.slice(0, -4) + 'ón';
+            if (word.endsWith('anes')) return word.slice(0, -4) + 'án';
+            if (word.endsWith('ines')) return word.slice(0, -4) + 'ín';
+
+            // -ces → -z (peces → pez, luces → luz)
+            if (word.endsWith('ces')) return word.slice(0, -3) + 'z';
+
+            // -es después de consonante
+            if (word.endsWith('es') && word.length > 3) {
+                const sinEs = word.slice(0, -2);
+                const ultimaLetra = sinEs[sinEs.length - 1];
+                if ('dlnrsz'.includes(ultimaLetra)) return sinEs;
+            }
+
+            // -s simple (casas → casa, libros → libro)
+            if (word.endsWith('s') && !word.endsWith('ss') && word.length > 2) {
+                return word.slice(0, -1);
+            }
+
+            return palabra; // Devolver original si no hay regla
         }
 
-        async function searchPicto(word) {
-            const wordLower = word.toLowerCase();
-            let pictoUrl = await searchPictoAPI(wordLower);
-            if (pictoUrl) return pictoUrl;
+        // Función principal de normalización
+        // Intenta convertir cualquier palabra a su forma de diccionario
+        // IMPORTANTE: Prioriza traducciones gallego→español ANTES de la palabra original
+        // para evitar falsos positivos por subcadenas (ej: "non" → "esternon")
+        function normalizarPalabra(palabra) {
+            const word = palabra.toLowerCase().trim();
+            const formas = [];
 
-            const traduccionLocal = gallegoEspanol[wordLower];
-            if (traduccionLocal) {
-                pictoUrl = await searchPictoAPI(traduccionLocal);
-                if (pictoUrl) {
-                    state.translations.set(wordLower, traduccionLocal);
-                    return pictoUrl;
+            // 1. PRIMERO: Traducciones directas gallego → español (máxima prioridad)
+            // Esto evita que "non" encuentre "esternón" o "onte" encuentre "contenedor"
+            if (gallegoEspanol[word]) {
+                formas.push(gallegoEspanol[word]);
+            }
+
+            // 2. Verbos gallegos conjugados → infinitivo español
+            if (verbosGallegoInfinitivo[word]) {
+                formas.push(verbosGallegoInfinitivo[word]);
+            }
+            if (verbosGallegoAdicionales[word]) {
+                formas.push(verbosGallegoAdicionales[word]);
+            }
+
+            // 3. Verbos españoles conjugados → infinitivo
+            if (verbosEspanolInfinitivo[word]) {
+                formas.push(verbosEspanolInfinitivo[word]);
+            }
+
+            // 4. Singularización (antes de la palabra original)
+            const singular = singularizar(word);
+            if (singular !== word) {
+                formas.push(singular);
+                // También traducir el singular
+                if (gallegoEspanol[singular]) {
+                    formas.push(gallegoEspanol[singular]);
                 }
             }
 
+            // 5. Forma original (solo si no hay traducciones)
+            // Se añade después de las traducciones para evitar falsos positivos
+            formas.push(word);
+
+            // 6. Sin acentos (última opción)
+            const sinAcentos = word.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (sinAcentos !== word) {
+                formas.push(sinAcentos);
+            }
+
+            // Eliminar duplicados y mantener orden de prioridad
+            return [...new Set(formas)];
+        }
+
+        // Cache de pictogramas para evitar llamadas repetidas
+        const pictoCache = new Map();
+
+        // Buscar pictograma en API oficial ARASAAC
+        // IMPORTANTE: Solo acepta resultados con coincidencia EXACTA de keyword
+        // Devuelve objeto con URL principal y alternativas
+        async function searchArasaacAPI(word) {
+            // Verificar cache primero
+            if (pictoCache.has(word)) {
+                return pictoCache.get(word);
+            }
+
             try {
-                const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=gl|es`;
+                const url = `https://api.arasaac.org/api/pictograms/es/search/${encodeURIComponent(word)}`;
                 const response = await fetch(url);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data?.responseData?.translatedText) {
-                        const translated = data.responseData.translatedText.toLowerCase().trim();
-                        if (translated !== wordLower && !translated.includes('.') && translated.length < 30) {
-                            pictoUrl = await searchPictoAPI(translated);
-                            if (pictoUrl) {
-                                state.translations.set(wordLower, translated);
-                                return pictoUrl;
-                            }
-                        }
-                    }
+                if (!response.ok) {
+                    pictoCache.set(word, null);
+                    return null;
                 }
-            } catch {}
+
+                const data = await response.json();
+                if (!data || data.length === 0) {
+                    pictoCache.set(word, null);
+                    return null;
+                }
+
+                // CRÍTICO: Filtrar SOLO pictogramas con coincidencia EXACTA de keyword
+                const exactMatches = data.filter(picto =>
+                    picto.keywords?.some(k =>
+                        k.keyword?.toLowerCase() === word.toLowerCase()
+                    )
+                );
+
+                if (exactMatches.length === 0) {
+                    pictoCache.set(word, null);
+                    return null;
+                }
+
+                // Ordenar por puntuación (AAC y esquemáticos primero)
+                const scored = exactMatches.map(picto => {
+                    let score = 0;
+                    if (picto.aac) score += 10;
+                    if (picto.schematic) score += 5;
+                    return { picto, score };
+                }).sort((a, b) => b.score - a.score);
+
+                // Construir resultado con alternativas (máximo 6)
+                const alternatives = scored.slice(0, 6).map(({ picto }) => ({
+                    id: picto._id,
+                    url: `https://static.arasaac.org/pictograms/${picto._id}/${picto._id}_500.png`
+                }));
+
+                const result = {
+                    url: alternatives[0].url,
+                    alternatives: alternatives
+                };
+
+                pictoCache.set(word, result);
+                return result;
+
+            } catch (error) {
+                console.error('Error buscando pictograma:', word, error);
+                pictoCache.set(word, null);
+                return null;
+            }
+        }
+
+        // Llamar a la API de lematización SpaCy
+        async function lemmatizeWords(words) {
+            try {
+                // Timeout de 60s para cold start de Render
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+                const response = await fetch(`${LEMMATIZER_API}/lemmatize/words`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ words }),
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    console.warn('API lematización: respuesta no OK', response.status);
+                    return null;
+                }
+                const data = await response.json();
+                console.log('Lemas recibidos:', data.results);
+                return data.results;
+            } catch (error) {
+                console.warn('API de lematización no disponible:', error.message);
+                return null;
+            }
+        }
+
+        // Función principal de búsqueda
+        // Prueba: 1) lema de SpaCy, 2) formas normalizadas locales
+        async function searchPicto(word) {
+            const wordLower = word.toLowerCase().trim();
+
+            // Ignorar palabras de 1 sola letra
+            if (wordLower.length <= 1) {
+                return null;
+            }
+
+            // Prioridad 1: Si tenemos lema de SpaCy, usarlo primero
+            if (state.lemmas.has(wordLower)) {
+                const lemma = state.lemmas.get(wordLower);
+                const result = await searchArasaacAPI(lemma);
+                if (result) {
+                    if (lemma !== wordLower) {
+                        state.translations.set(wordLower, lemma);
+                    }
+                    return result;
+                }
+            }
+
+            // Prioridad 2: Formas normalizadas locales (diccionarios)
+            const formas = normalizarPalabra(wordLower);
+
+            for (const forma of formas) {
+                const result = await searchArasaacAPI(forma);
+                if (result) {
+                    if (forma !== wordLower) {
+                        state.translations.set(wordLower, forma);
+                    }
+                    return result;
+                }
+            }
+
             return null;
+        }
+
+        // Búsqueda en lote para mayor eficiencia
+        async function searchPictosBatch(words) {
+            const uniqueWords = [...new Set(words.map(w => w.toLowerCase()))];
+            const results = new Map();
+
+            // Procesar en paralelo con límite de concurrencia
+            const BATCH_SIZE = 5;
+            for (let i = 0; i < uniqueWords.length; i += BATCH_SIZE) {
+                const batch = uniqueWords.slice(i, i + BATCH_SIZE);
+                const promises = batch.map(async word => {
+                    const url = await searchPicto(word);
+                    results.set(word, url);
+                });
+                await Promise.all(promises);
+            }
+
+            return results;
         }
 
         // Gestión del tema
@@ -1182,43 +1857,96 @@
             elements.convertBtn.disabled = state.selectedWords.size === 0;
         }
 
-        // Convertir a pictogramas
+        // Convertir a pictogramas (optimizado con búsqueda en lote)
         async function convertToPictos() {
             showStep(3);
             elements.loadingState.classList.remove('hidden');
             elements.previewContainer.classList.add('hidden');
 
-            const uniqueWords = [...new Set(Array.from(state.selectedWords).map(idx => state.tokens[idx].value.toLowerCase()))];
+            const selectedTokens = Array.from(state.selectedWords).map(idx => state.tokens[idx].value);
+            const uniqueWords = [...new Set(selectedTokens.map(w => w.toLowerCase()))];
+
+            // Filtrar palabras que ya tenemos en cache
+            const wordsToSearch = uniqueWords.filter(w => !state.pictos.has(w));
+
+            if (wordsToSearch.length === 0) {
+                elements.loadingState.classList.add('hidden');
+                elements.previewContainer.classList.remove('hidden');
+                renderPreview();
+                return;
+            }
+
+            // Paso 1: Obtener lemas del servidor SpaCy (si está disponible)
+            elements.loadingText.textContent = 'Analizando palabras...';
+            elements.progressBar.style.width = '5%';
+
+            const lemmaResults = await lemmatizeWords(wordsToSearch);
+            if (lemmaResults) {
+                lemmaResults.forEach(r => {
+                    const original = r.original.toLowerCase();
+                    if (r.lemma && r.lemma !== original) {
+                        state.lemmas.set(original, r.lemma);
+                    }
+                });
+            }
+
+            elements.loadingText.textContent = `Buscando ${wordsToSearch.length} pictogramas...`;
+            elements.progressBar.style.width = '10%';
+
+            // Paso 2: Búsqueda en paralelo con límite de concurrencia
+            const BATCH_SIZE = 5;
             let completed = 0;
 
-            for (const word of uniqueWords) {
-                elements.loadingText.textContent = `Buscando: ${word}`;
-                if (!state.pictos.has(word)) {
-                    state.pictos.set(word, await searchPicto(word));
-                }
-                completed++;
-                elements.progressBar.style.width = `${(completed / uniqueWords.length) * 100}%`;
+            for (let i = 0; i < wordsToSearch.length; i += BATCH_SIZE) {
+                const batch = wordsToSearch.slice(i, i + BATCH_SIZE);
+                elements.loadingText.textContent = `Buscando: ${batch.join(', ')}`;
+
+                const promises = batch.map(async word => {
+                    const result = await searchPicto(word);
+                    state.pictos.set(word, result);
+                    completed++;
+                    elements.progressBar.style.width = `${10 + (completed / wordsToSearch.length) * 90}%`;
+                });
+
+                await Promise.all(promises);
             }
 
             elements.loadingState.classList.add('hidden');
             elements.previewContainer.classList.remove('hidden');
             renderPreview();
+
+            // Mostrar estadísticas
+            const found = Array.from(state.pictos.values()).filter(v => v && v.url).length;
+            const total = state.pictos.size;
+            if (found < total) {
+                showToast(`${found}/${total} pictogramas encontrados`, 'info');
+            }
         }
 
         // Renderizar previsualización
+        // Nota: innerHTML es seguro aquí porque los datos vienen de ARASAAC (API confiable)
+        // y del texto del usuario (no ejecutable)
         function renderPreview() {
             let html = '';
             state.tokens.forEach((token, index) => {
                 if (token.type === 'newline') { html += '<br>'; return; }
                 if (token.type === 'word' && state.selectedWords.has(index)) {
                     const word = token.value.toLowerCase();
-                    const pictoUrl = state.pictos.get(word);
+                    const pictoData = state.pictos.get(word);
                     const translation = state.translations.get(word);
                     const captionText = translation && translation !== word ? `${token.value} (${translation})` : token.value;
 
-                    if (pictoUrl) {
-                        html += `<span class="picto-container">
-                            <img src="${pictoUrl}" alt="${token.value}" class="picto-image" style="width:${state.pictoSize}px;height:${state.pictoSize}px;object-fit:contain;">
+                    if (pictoData && pictoData.url) {
+                        const hasAlternatives = pictoData.alternatives && pictoData.alternatives.length > 1; console.log("Alternativas para "+word+":", pictoData.alternatives?.length);
+                        html += `<span class="picto-container" data-word="${word}">
+                            ${hasAlternatives ? `<button class="picto-change-btn" onclick="showAlternatives('${word}')" title="Cambiar pictograma">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                                    <path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+                                    <path d="M16 16h5v5"/>
+                                </svg>
+                            </button>` : ''}
+                            <img src="${pictoData.url}" alt="${token.value}" class="picto-image" style="width:${state.pictoSize}px;height:${state.pictoSize}px;object-fit:contain;">
                             <span class="picto-caption">${captionText}</span>
                         </span>`;
                     } else {
@@ -1229,6 +1957,41 @@
                 }
             });
             elements.previewDocument.innerHTML = html;
+        }
+
+        // Mostrar modal de alternativas
+        function showAlternatives(word) {
+            const pictoData = state.pictos.get(word);
+            if (!pictoData || !pictoData.alternatives) return;
+
+            const modal = document.getElementById('alternativesModal');
+            const grid = document.getElementById('alternativesGrid');
+            document.getElementById('alternativesWord').textContent = word;
+
+            grid.innerHTML = pictoData.alternatives.map(alt => `
+                <button class="alt-picto ${alt.url === pictoData.url ? 'selected' : ''}"
+                        onclick="selectAlternative('${word}', '${alt.url}')">
+                    <img src="${alt.url}" alt="${word}">
+                </button>
+            `).join('');
+
+            modal.classList.remove('hidden');
+        }
+
+        // Seleccionar alternativa
+        function selectAlternative(word, newUrl) {
+            const pictoData = state.pictos.get(word);
+            if (pictoData) {
+                pictoData.url = newUrl;
+                state.pictos.set(word, pictoData);
+            }
+            document.getElementById('alternativesModal').classList.add('hidden');
+            renderPreview();
+        }
+
+        // Cerrar modal
+        function closeAlternativesModal() {
+            document.getElementById('alternativesModal').classList.add('hidden');
         }
 
         // Exportar a .docx
@@ -1243,12 +2006,12 @@
                 for (let i = 0; i < state.tokens.length; i++) {
                     const token = state.tokens[i];
                     if (token.type === 'word' && state.selectedWords.has(i)) {
-                        const pictoUrl = state.pictos.get(token.value.toLowerCase());
-                        if (pictoUrl && !imageCache.has(pictoUrl)) {
+                        const pictoData = state.pictos.get(token.value.toLowerCase());
+                        if (pictoData && pictoData.url && !imageCache.has(pictoData.url)) {
                             try {
-                                const response = await fetch(pictoUrl);
+                                const response = await fetch(pictoData.url);
                                 const blob = await response.blob();
-                                imageCache.set(pictoUrl, await blob.arrayBuffer());
+                                imageCache.set(pictoData.url, await blob.arrayBuffer());
                             } catch {}
                         }
                     }
@@ -1265,7 +2028,8 @@
                         continue;
                     }
                     if (token.type === 'word' && state.selectedWords.has(i)) {
-                        const imageData = imageCache.get(state.pictos.get(token.value.toLowerCase()));
+                        const pictoData = state.pictos.get(token.value.toLowerCase());
+                        const imageData = pictoData ? imageCache.get(pictoData.url) : null;
                         if (imageData) {
                             currentParagraphChildren.push(new ImageRun({ data: imageData, transformation: { width: state.pictoSize, height: state.pictoSize } }));
                             currentParagraphChildren.push(new TextRun({ text: `(${token.value}) `, size: 18, color: '666666' }));

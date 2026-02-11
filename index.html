@@ -510,48 +510,7 @@
             transform: scale(1.1);
         }
 
-        /* Modal de alternativas */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            backdrop-filter: blur(4px);
-        }
-
-        .modal-overlay.hidden {
-            display: none;
-        }
-
-        .modal-content {
-            background: var(--bg-elevated);
-            border-radius: var(--radius);
-            padding: 1.5rem;
-            max-width: 400px;
-            width: 90%;
-            box-shadow: var(--shadow-lg);
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .modal-header h3 {
-            font-size: 1rem;
-            font-weight: 500;
-        }
-
-        .modal-header span {
-            color: var(--accent);
-            font-weight: 600;
-        }
-
+        /* Grid de alternativas de pictos */
         .alternatives-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -814,6 +773,13 @@
             #printContainer img {
                 max-width: 80px !important;
             }
+            #printContainer .picto-change-btn {
+                display: none !important;
+            }
+            #printContainer .preview-document,
+            #printContainer * {
+                box-shadow: none !important;
+            }
             .picto-inline {
                 display: inline-flex !important;
                 page-break-inside: avoid !important;
@@ -1045,10 +1011,10 @@
     <div id="toast" class="toast"></div>
 
     <!-- Modal de alternativas de pictos -->
-    <div id="alternativesModal" class="modal-overlay hidden">
-        <div class="modal-content">
+    <div id="alternativesModal" class="modal-overlay">
+        <div class="modal">
             <div class="modal-header">
-                <h3>Elige pictograma para: <span id="alternativesWord"></span></h3>
+                <h3 class="modal-title">Elige pictograma para: <span id="alternativesWord" style="color:var(--accent);font-weight:600"></span></h3>
                 <button class="btn btn-icon btn-ghost" onclick="closeAlternativesModal()">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 6L6 18M6 6l12 12"/>
@@ -1283,9 +1249,20 @@
             'no': 'en el', 'na': 'en la', 'nos': 'en los', 'nas': 'en las',
             'co': 'con el', 'coa': 'con la', 'cos': 'con los', 'coas': 'con las',
             'polo': 'por el', 'pola': 'por la', 'polos': 'por los', 'polas': 'por las',
-            // Adverbios y otros
+            // Adverbios, conjunciones y otros
             'mesmo': 'mismo', 'mesma': 'misma', 'tamén': 'también',
             'así': 'así', 'ben': 'bien', 'mal': 'mal', 'máis': 'más', 'menos': 'menos',
+            'mentres': 'mientras', 'despois': 'después', 'agora': 'ahora',
+            'hoxe': 'hoy', 'onte': 'ayer', 'sempre': 'siempre', 'nunca': 'nunca',
+            'lonxe': 'lejos', 'preto': 'cerca', 'arriba': 'arriba', 'abaixo': 'abajo',
+            'fóra': 'fuera', 'dentro': 'dentro', 'diante': 'delante', 'detrás': 'detrás',
+            'moito': 'mucho', 'moita': 'mucha', 'pouco': 'poco', 'pouca': 'poca',
+            // Sustantivos irregulares (no cubiertos por reglas morfológicas)
+            'rapaz': 'chico', 'rapaza': 'chica', 'rapaces': 'chicos',
+            'corpo': 'cuerpo', 'ollo': 'ojo', 'ollos': 'ojos',
+            'roupa': 'ropa', 'xantar': 'comida', 'cea': 'cena', 'almorzo': 'desayuno',
+            'fillo': 'hijo', 'filla': 'hija', 'fillos': 'hijos', 'fillas': 'hijas',
+            'cidade': 'ciudad', 'cidades': 'ciudades',
             // Infinitivos gallegos (distintos del español) para deconjugación
             'xogar': 'jugar', 'falar': 'hablar', 'durmir': 'dormir',
             'saír': 'salir', 'vir': 'venir', 'dicir': 'decir',
@@ -1776,6 +1753,60 @@
             return [...new Set(formas)];
         }
 
+        // Transformación morfológica gallego → español por reglas sistemáticas
+        // Las dos lenguas comparten estructura: con ~20 reglas se cubren cientos de palabras
+        function traducirGallegoReglas(palabra) {
+            const w = palabra.toLowerCase();
+            const formas = [];
+
+            // Sufijos nominales y adjetivales (más largo primero para evitar falsos)
+            const reglas = [
+                // -eira(s) → -era(s): carreira→carrera, madeira→madera, escaleira→escalera
+                [/eiras$/, 'eras'], [/eira$/, 'era'],
+                // -eiro(s) → -ero(s): primeiro→primero, carpinteiro→carpintero
+                [/eiros$/, 'eros'], [/eiro$/, 'ero'],
+                // -llo(s) → -jo(s): traballo→trabajo, espello→espejo, fillo→hijo
+                [/llos$/, 'jos'], [/llo$/, 'jo'],
+                // -lla(s) → -ja(s): ovella→oveja, abella→abeja, filla→hija
+                [/llas$/, 'jas'], [/lla$/, 'ja'],
+                // -zo(s)/-za(s) → -zo/-za (iguales, pero probar -ción tb)
+                // -ción = igual en ambas lenguas
+                // -dade(s) → -dad(es): cidade→ciudad, liberdade→libertad
+                [/dades$/, 'dades'], [/dade$/, 'dad'],
+                // -anza(s) → -anza(s): confianza, esperanza (iguales)
+                // -mento(s) → -miento(s): sentimento→sentimiento, movemento→movimiento
+                [/imentos$/, 'imientos'], [/imento$/, 'imiento'],
+                [/ementos$/, 'imientos'], [/emento$/, 'imiento'],
+                [/amentos$/, 'amientos'], [/amento$/, 'amiento'],
+                // -ble → -ble (igual): amable, terrible
+                // -oso(s)/-osa(s) → -oso/-osa (igual): fermoso→hermoso
+                // x- inicial → j-: xogar→jugar, xardín→jardín, xenro→yerno
+                [/^x/, 'j'],
+                // -zón → -zón: corazón (igual)
+                // -ín/-iña → -ín/-iña o -ino/-ina: veciño→vecino
+                [/iños$/, 'inos'], [/iño$/, 'ino'],
+                [/iñas$/, 'inas'], [/iña$/, 'ina'],
+                // -án/-á → -ano/-ana: irmán→hermano... irregular, skip
+                // -ente → -iente: quente→caliente... irregular, in dict
+                // ou → o/ue: cousa→cosa, louro→rubio... parcialmente regular
+                [/ouso$/, 'oso'], [/ousa$/, 'osa'],
+                // -nza → -nza (igual): confianza
+                // -ería → -ería (igual): carpintería
+                // -mente → -mente (igual): facilmente
+                // -ción → -ción (igual)
+                // -ble → -ble (igual)
+            ];
+
+            for (const [patron, reemplazo] of reglas) {
+                if (patron.test(w)) {
+                    const forma = w.replace(patron, reemplazo);
+                    if (forma !== w) formas.push(forma);
+                }
+            }
+
+            return formas;
+        }
+
         // Función principal de normalización
         // Intenta convertir cualquier palabra a su forma de diccionario
         // IMPORTANTE: Prioriza traducciones gallego→español ANTES de la palabra original
@@ -1852,7 +1883,15 @@
                 deconjugarVerboGallego(word).forEach(addConTraduccion);
             }
 
-            // 8. Sin acentos (última opción)
+            // 8. Transformación morfológica gallego → español por reglas
+            // Cubre cientos de palabras sin necesidad de diccionario explícito
+            traducirGallegoReglas(word).forEach(f => formas.push(f));
+            // También aplicar reglas al singular (carreiras → carreira → carrera)
+            if (singular !== word) {
+                traducirGallegoReglas(singular).forEach(f => formas.push(f));
+            }
+
+            // 9. Sin acentos (última opción)
             const sinAcentos = word.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             if (sinAcentos !== word) {
                 formas.push(sinAcentos);
@@ -1876,7 +1915,10 @@
 
             try {
                 const url = `https://api.arasaac.org/api/pictograms/es/search/${encodeURIComponent(word)}`;
-                const response = await fetch(url);
+                const arasaacController = new AbortController();
+                const arasaacTimeout = setTimeout(() => arasaacController.abort(), 8000);
+                const response = await fetch(url, { signal: arasaacController.signal });
+                clearTimeout(arasaacTimeout);
                 if (!response.ok) {
                     pictoCache.set(word, null);
                     return null;
@@ -1932,9 +1974,9 @@
         // Llamar a la API de lematización SpaCy
         async function lemmatizeWords(words) {
             try {
-                // Timeout de 60s para cold start de Render
+                // Timeout de 5s: si SpaCy no responde rápido, fallback local
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 60000);
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
 
                 const response = await fetch(`${LEMMATIZER_API}/lemmatize/words`, {
                     method: 'POST',
@@ -2130,7 +2172,7 @@
             elements.progressBar.style.width = '10%';
 
             // Paso 2: Búsqueda en paralelo con límite de concurrencia
-            const BATCH_SIZE = 5;
+            const BATCH_SIZE = 8;
             let completed = 0;
 
             for (let i = 0; i < wordsToSearch.length; i += BATCH_SIZE) {
@@ -2173,7 +2215,7 @@
                     const captionText = translation && translation !== word ? `${token.value} (${translation})` : token.value;
 
                     if (pictoData && pictoData.url) {
-                        const hasAlternatives = pictoData.alternatives && pictoData.alternatives.length > 1; console.log("Alternativas para "+word+":", pictoData.alternatives?.length);
+                        const hasAlternatives = pictoData.alternatives && pictoData.alternatives.length > 1;
                         html += `<span class="picto-container" data-word="${word}">
                             ${hasAlternatives ? `<button class="picto-change-btn" onclick="showAlternatives('${word}')" title="Cambiar pictograma">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2195,7 +2237,7 @@
             elements.previewDocument.innerHTML = html;
         }
 
-        // Mostrar modal de alternativas
+        // Mostrar modal de alternativas (mismo patrón que settingsModal)
         function showAlternatives(word) {
             const pictoData = state.pictos.get(word);
             if (!pictoData || !pictoData.alternatives) return;
@@ -2204,14 +2246,19 @@
             const grid = document.getElementById('alternativesGrid');
             document.getElementById('alternativesWord').textContent = word;
 
-            grid.innerHTML = pictoData.alternatives.map(alt => `
-                <button class="alt-picto ${alt.url === pictoData.url ? 'selected' : ''}"
-                        onclick="selectAlternative('${word}', '${alt.url}')">
-                    <img src="${alt.url}" alt="${word}">
-                </button>
-            `).join('');
+            // Construir grid de alternativas con DOM seguro
+            grid.replaceChildren();
+            pictoData.alternatives.forEach(alt => {
+                const btn = document.createElement('button');
+                btn.className = 'alt-picto' + (alt.url === pictoData.url ? ' selected' : '');
+                btn.onclick = () => selectAlternative(word, alt.url);
+                const img = document.createElement('img');
+                img.src = alt.url;
+                img.alt = word;
+                btn.appendChild(img);
+                grid.appendChild(btn);
+            });
 
-            modal.classList.remove('hidden');
             modal.classList.add('visible');
         }
 
@@ -2222,17 +2269,13 @@
                 pictoData.url = newUrl;
                 state.pictos.set(word, pictoData);
             }
-            const modal = document.getElementById('alternativesModal');
-            modal.classList.remove('visible');
-            modal.classList.add('hidden');
+            closeAlternativesModal();
             renderPreview();
         }
 
-        // Cerrar modal
+        // Cerrar modal de alternativas
         function closeAlternativesModal() {
-            const modal = document.getElementById('alternativesModal');
-            modal.classList.remove('visible');
-            modal.classList.add('hidden');
+            document.getElementById('alternativesModal').classList.remove('visible');
         }
 
         // Exportar a .docx
@@ -2298,18 +2341,49 @@
         }
 
         // Exportar a PDF
-        function downloadPdf() {
+        async function downloadPdf() {
             try {
-                alert('Para un PDF limpio:\n\n1. Pulsa "Más opciones"\n2. Desmarca "Encabezados y pies de página"\n3. Selecciona "Guardar como PDF"');
+                showToast('Preparando PDF...', 'info');
                 const printContainer = document.createElement('div');
                 printContainer.id = 'printContainer';
-                printContainer.innerHTML = elements.previewDocument.innerHTML;
+                printContainer.style.position = 'absolute';
+                printContainer.style.left = '-9999px';
                 document.body.appendChild(printContainer);
+
+                // Reconstruir contenido sin botones de cambiar picto
+                const source = elements.previewDocument.cloneNode(true);
+                source.querySelectorAll('.picto-change-btn').forEach(btn => btn.remove());
+                printContainer.appendChild(source);
+
+                // Convertir imágenes externas a data URL para impresión fiable
+                const images = printContainer.querySelectorAll('img');
+                await Promise.all(Array.from(images).map(img => new Promise(resolve => {
+                    if (!img.src || img.complete) { resolve(); return; }
+                    const newImg = new Image();
+                    newImg.crossOrigin = 'anonymous';
+                    newImg.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = newImg.naturalWidth;
+                        canvas.height = newImg.naturalHeight;
+                        canvas.getContext('2d').drawImage(newImg, 0, 0);
+                        try { img.src = canvas.toDataURL('image/png'); } catch(e) { /* CORS fallback: mantener URL original */ }
+                        resolve();
+                    };
+                    newImg.onerror = resolve;
+                    newImg.src = img.src;
+                })));
+
+                // Posicionar para impresión
+                printContainer.style.position = '';
+                printContainer.style.left = '';
+
+                alert('Para un PDF limpio:\n\n1. Pulsa "Más opciones"\n2. Desmarca "Encabezados y pies de página"\n3. Selecciona "Guardar como PDF"');
+
                 const cleanup = () => { printContainer.remove(); window.removeEventListener('afterprint', cleanup); };
                 window.addEventListener('afterprint', cleanup);
                 window.print();
             } catch (error) {
-                showToast('Error al abrir el diálogo de impresión', 'error');
+                showToast('Error al generar el PDF', 'error');
             }
         }
 
@@ -2383,6 +2457,11 @@
         elements.saveSettingsBtn.addEventListener('click', saveSettings);
         document.addEventListener('keydown', e => e.key === 'Escape' && elements.settingsModal.classList.contains('visible') && closeSettings());
         elements.settingsModal.addEventListener('click', e => e.target === elements.settingsModal && closeSettings());
+
+        // Cerrar modal alternativas con click fuera o Escape
+        const altModal = document.getElementById('alternativesModal');
+        altModal.addEventListener('click', e => e.target === altModal && closeAlternativesModal());
+        document.addEventListener('keydown', e => e.key === 'Escape' && altModal.classList.contains('visible') && closeAlternativesModal());
 
         // Inicialización
         updateThemeIcons();

@@ -1039,7 +1039,8 @@
             lemmas: new Map(),           // word -> lemma (del servidor SpaCy)
             pictoSize: parseInt(localStorage.getItem('pictoSize') || '60'),
             darkMode: localStorage.getItem('darkMode') !== 'false',
-            esGallego: false                // detectado automáticamente
+            esGallego: false,               // detectado automáticamente
+            apertiumCache: new Map()        // palabra gallega → traducción española
         };
 
         // Elementos del DOM
@@ -1145,6 +1146,7 @@
             // Adverbios/partículas exclusivamente gallegas
             'hoxe', 'onte', 'mañá', 'agora', 'tamén', 'mesmo', 'mesma',
             'sempre', 'despois', 'lonxe', 'preto', 'máis', 'moito', 'pouco',
+            'mentres', 'aínda', 'xa', 'moi', 'abonda', 'nada',
             // Contracciones (solo existen en gallego)
             'do', 'da', 'dos', 'das', 'ao', 'aos', 'co', 'coa', 'cos', 'coas',
             'polo', 'pola', 'polos', 'polas', 'unha',
@@ -1163,6 +1165,33 @@
             }
             // Si al menos 1 palabra es exclusivamente gallega, asumir gallego
             return gallegoCount >= 1;
+        }
+
+        // Traducción gallego → español con Apertium (API gratuita, sin key)
+        // Envía todas las palabras en un solo fetch, separadas por \n
+        async function traducirConApertium(words) {
+            const traducciones = new Map();
+            try {
+                const controller = new AbortController();
+                setTimeout(() => controller.abort(), 6000);
+                const query = words.join('\n');
+                const url = `https://apertium.org/apy/translate?q=${encodeURIComponent(query)}&langpair=gl|es`;
+                const response = await fetch(url, { signal: controller.signal });
+                if (!response.ok) return traducciones;
+                const data = await response.json();
+                const resultados = data.responseData.translatedText.split('\n');
+                words.forEach((word, i) => {
+                    let traduccion = resultados[i]?.trim().toLowerCase();
+                    // Apertium marca con * las palabras que no puede traducir
+                    if (!traduccion || traduccion.startsWith('*')) return;
+                    if (traduccion !== word.toLowerCase()) {
+                        traducciones.set(word.toLowerCase(), traduccion);
+                    }
+                });
+            } catch (e) {
+                console.warn('Apertium no disponible, usando fallback local:', e.message);
+            }
+            return traducciones;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -1473,7 +1502,7 @@
             'quiero': 'querer', 'quieres': 'querer', 'quiere': 'querer', 'queremos': 'querer', 'quieren': 'querer',
             'quería': 'querer', 'quise': 'querer', 'quiso': 'querer', 'quisieron': 'querer',
             'querré': 'querer', 'querrá': 'querer', 'querrán': 'querer',
-            'queriendo': 'querer', 'querido': 'querer',
+            'queriendo': 'querer', 'querido': 'querer', 'querida': 'querer',
 
             // Poder
             'puedo': 'poder', 'puedes': 'poder', 'puede': 'poder', 'podemos': 'poder', 'pueden': 'poder',
@@ -1621,6 +1650,28 @@
             return palabra; // Devolver original si no hay regla
         }
 
+        // Eliminar diminutivo gallego -iña/-iño para obtener la forma base
+        // princesiña → princesa, riquiña → rica, vaquiña → vaca, neniño → neno
+        function eliminarDiminutivo(palabra) {
+            const w = palabra.toLowerCase();
+            const formas = [];
+            // -quiña(s) → -ca(s): riquiña → rica, vaquiña → vaca
+            if (w.match(/quiñas$/)) formas.push(w.replace(/quiñas$/, 'cas'));
+            else if (w.match(/quiña$/)) formas.push(w.replace(/quiña$/, 'ca'));
+            else if (w.match(/quiños$/)) formas.push(w.replace(/quiños$/, 'cos'));
+            else if (w.match(/quiño$/)) formas.push(w.replace(/quiño$/, 'co'));
+            // -guiña(s) → -ga(s)
+            else if (w.match(/guiña$/)) formas.push(w.replace(/guiña$/, 'ga'));
+            else if (w.match(/guiño$/)) formas.push(w.replace(/guiño$/, 'go'));
+            // -ciña(s) → -za(s): canciónciña → canción (raro, pero por si acaso)
+            // -iña(s)/-iño(s) genérico: princesiña → princesa, neniño → neno
+            else if (w.match(/iñas$/)) formas.push(w.replace(/iñas$/, 'as'), w.replace(/iñas$/, 'a'));
+            else if (w.match(/iña$/)) formas.push(w.replace(/iña$/, 'a'));
+            else if (w.match(/iños$/)) formas.push(w.replace(/iños$/, 'os'), w.replace(/iños$/, 'o'));
+            else if (w.match(/iño$/)) formas.push(w.replace(/iño$/, 'o'));
+            return formas;
+        }
+
         // Desflexión de adjetivos: femenino/plural/superlativo → masculino singular
         // Genera candidatos adicionales para probar en ARASAAC
         function desflexionarAdjetivo(palabra) {
@@ -1666,13 +1717,27 @@
                 formas.push(w.slice(0, -5) + 'er', w.slice(0, -5) + 'ir');
             }
 
-            // Participio: -ado → -ar, -ido → -er/-ir
+            // Participio masculino: -ado → -ar, -ido → -er/-ir
             if (w.endsWith('ado') && w.length > 4 && !vocales.includes(w[w.length - 4])) {
                 formas.push(w.slice(0, -3) + 'ar');
             }
             if (w.endsWith('ido') && w.length > 4 && !vocales.includes(w[w.length - 4])) {
                 formas.push(w.slice(0, -3) + 'er', w.slice(0, -3) + 'ir');
             }
+
+            // Participio femenino: -ada → -ar, -ida → -er/-ir (querida → querer)
+            if (w.endsWith('ada') && w.length > 4 && !vocales.includes(w[w.length - 4])) {
+                formas.push(w.slice(0, -3) + 'ar');
+            }
+            if (w.endsWith('ida') && w.length > 4 && !vocales.includes(w[w.length - 4])) {
+                formas.push(w.slice(0, -3) + 'er', w.slice(0, -3) + 'ir');
+            }
+
+            // Participios plurales: -ados/-adas → -ar, -idos/-idas → -er/-ir
+            if (w.endsWith('ados') && w.length > 5) formas.push(w.slice(0, -4) + 'ar');
+            if (w.endsWith('adas') && w.length > 5) formas.push(w.slice(0, -4) + 'ar');
+            if (w.endsWith('idos') && w.length > 5) formas.push(w.slice(0, -4) + 'er', w.slice(0, -4) + 'ir');
+            if (w.endsWith('idas') && w.length > 5) formas.push(w.slice(0, -4) + 'er', w.slice(0, -4) + 'ir');
 
             // Imperfecto: -aba/-abas/-aban → -ar
             const impAr = w.match(/^(.{2,})(ábamos|abais|abas|aban|aba)$/);
@@ -1807,6 +1872,34 @@
             return formas;
         }
 
+        // Eliminar pronombres enclíticos gallegos (verbo+pronombre)
+        // quérote → quéro/quero, dígoche → dígo/digo, cómpralle → cómpra/compra
+        function stripEnclisis(palabra) {
+            const w = palabra.toLowerCase();
+            function quitarAcento(s) {
+                return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            }
+            const formas = [];
+            // Orden de mayor a menor longitud para evitar coincidencias parciales
+            const cliticos = [
+                'nolos', 'nolas', 'volos', 'volas',
+                'nolo', 'nola', 'volo', 'vola',
+                'llos', 'llas', 'llo', 'lla',
+                'lles', 'lle',
+                'nos', 'vos',
+                'che', 'me', 'te', 'se'
+            ];
+            for (const cl of cliticos) {
+                if (w.endsWith(cl) && w.length > cl.length + 2) {
+                    const stem = w.slice(0, -cl.length);
+                    formas.push(stem);
+                    const sinAcento = quitarAcento(stem);
+                    if (sinAcento !== stem) formas.push(sinAcento);
+                }
+            }
+            return [...new Set(formas.filter(f => f.length >= 2))];
+        }
+
         // Función principal de normalización
         // Intenta convertir cualquier palabra a su forma de diccionario
         // IMPORTANTE: Prioriza traducciones gallego→español ANTES de la palabra original
@@ -1873,17 +1966,34 @@
                 if (gallegoEspanol[forma]) formas.push(gallegoEspanol[forma]);
             }
 
-            // 6. Desflexión de adjetivos (roja → rojo, vermella → vermello → rojo)
+            // 6. Diminutivos gallegos (princesiña → princesa, riquiña → rica)
+            eliminarDiminutivo(word).forEach(addConTraduccion);
+
+            // 6b. Enclisis gallega (quérote → quéro/quero, dígoche → dígo/digo)
+            // Genera stems sin clítico para buscar el verbo base
+            const stems = stripEnclisis(word);
+            for (const stem of stems) {
+                addConTraduccion(stem);
+                // Buscar el infinitivo del stem en los diccionarios
+                if (verbosGallegoInfinitivo[stem]) formas.push(verbosGallegoInfinitivo[stem]);
+                if (verbosGallegoAdicionales[stem]) formas.push(verbosGallegoAdicionales[stem]);
+                if (verbosEspanolInfinitivo[stem]) formas.push(verbosEspanolInfinitivo[stem]);
+                // Deconjugar el stem (quero → querer via Apertium o reglas)
+                deconjugarVerbo(stem).forEach(addConTraduccion);
+                deconjugarVerboGallego(stem).forEach(addConTraduccion);
+            }
+
+            // 7. Desflexión de adjetivos (roja → rojo, vermella → vermello → rojo)
             desflexionarAdjetivo(word).forEach(addConTraduccion);
 
-            // 7. Deconjugación genérica de verbos (español + gallego)
+            // 8. Deconjugación genérica de verbos (español + gallego)
             // Solo si no se encontró en los diccionarios de verbos (pasos 2-3)
             if (!verbosGallegoInfinitivo[word] && !verbosGallegoAdicionales[word] && !verbosEspanolInfinitivo[word]) {
                 deconjugarVerbo(word).forEach(addConTraduccion);
                 deconjugarVerboGallego(word).forEach(addConTraduccion);
             }
 
-            // 8. Transformación morfológica gallego → español por reglas
+            // 9. Transformación morfológica gallego → español por reglas
             // Cubre cientos de palabras sin necesidad de diccionario explícito
             traducirGallegoReglas(word).forEach(f => formas.push(f));
             // También aplicar reglas al singular (carreiras → carreira → carrera)
@@ -1891,7 +2001,7 @@
                 traducirGallegoReglas(singular).forEach(f => formas.push(f));
             }
 
-            // 9. Sin acentos (última opción)
+            // 10. Sin acentos (última opción)
             const sinAcentos = word.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             if (sinAcentos !== word) {
                 formas.push(sinAcentos);
@@ -2007,6 +2117,33 @@
             // Ignorar palabras de 1 sola letra
             if (wordLower.length <= 1) {
                 return null;
+            }
+
+            // Prioridad 0: Traducción Apertium (gallego → español)
+            if (state.apertiumCache.has(wordLower)) {
+                const traduccion = state.apertiumCache.get(wordLower);
+                const palabras = traduccion.split(/\s+/).filter(p => p.length > 1);
+                // Priorizar palabras de contenido sobre funcionales (pronombres, artículos)
+                const funcionales = new Set(['te', 'me', 'se', 'le', 'lo', 'la', 'los', 'las', 'les', 'nos', 'os', 'un', 'una', 'el', 'al', 'del', 'de', 'en', 'a', 'por', 'para', 'con']);
+                const contenido = palabras.filter(p => !funcionales.has(p));
+                const ordenadas = [...contenido, ...palabras.filter(p => funcionales.has(p))];
+                for (const p of ordenadas) {
+                    // Buscar directamente en ARASAAC
+                    const result = await searchArasaacAPI(p);
+                    if (result) {
+                        state.translations.set(wordLower, traduccion);
+                        return result;
+                    }
+                    // Si no hay match directo, normalizar (quiero → querer)
+                    const formasNorm = normalizarPalabra(p);
+                    for (const forma of formasNorm) {
+                        const resultNorm = await searchArasaacAPI(forma);
+                        if (resultNorm) {
+                            state.translations.set(wordLower, p);
+                            return resultNorm;
+                        }
+                    }
+                }
             }
 
             // Prioridad 1: Si tenemos lema de SpaCy, usarlo primero
@@ -2154,9 +2291,19 @@
                 return;
             }
 
-            // Paso 1: Obtener lemas del servidor SpaCy (si está disponible)
+            // Paso 1a: Si es gallego, traducir con Apertium (prioridad máxima)
+            if (state.esGallego) {
+                elements.loadingText.textContent = 'Traducindo do galego...';
+                elements.progressBar.style.width = '5%';
+                const traducciones = await traducirConApertium(wordsToSearch);
+                traducciones.forEach((traduccion, original) => {
+                    state.apertiumCache.set(original, traduccion);
+                });
+            }
+
+            // Paso 1b: Obtener lemas del servidor SpaCy (si está disponible)
             elements.loadingText.textContent = 'Analizando palabras...';
-            elements.progressBar.style.width = '5%';
+            elements.progressBar.style.width = '8%';
 
             const lemmaResults = await lemmatizeWords(wordsToSearch);
             if (lemmaResults) {

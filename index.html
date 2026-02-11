@@ -1072,7 +1072,8 @@
             translations: new Map(),
             lemmas: new Map(),           // word -> lemma (del servidor SpaCy)
             pictoSize: parseInt(localStorage.getItem('pictoSize') || '60'),
-            darkMode: localStorage.getItem('darkMode') !== 'false'
+            darkMode: localStorage.getItem('darkMode') !== 'false',
+            esGallego: false                // detectado automáticamente
         };
 
         // Elementos del DOM
@@ -1156,6 +1157,46 @@
                 }
             }
             return tokens;
+        }
+
+        // Detectar si el texto es predominantemente gallego
+        // Busca palabras exclusivamente gallegas (no existen en español)
+        const marcadoresGallegos = new Set([
+            // Sustantivos que solo existen en gallego
+            'neno', 'nena', 'nenos', 'nenas', 'mazá', 'auga', 'leite', 'peixe',
+            'can', 'galiña', 'ovella', 'escola', 'xoguete', 'cadeira', 'caderno',
+            'boneca', 'paxaro', 'cabalo', 'coello', 'fillo', 'filla', 'fillos',
+            'nai', 'pai', 'avó', 'avoa', 'irmán', 'irmá', 'veciño', 'veciña',
+            'mestre', 'mestra', 'choiva', 'neve', 'vento', 'árbore', 'folla',
+            'herba', 'praia', 'ceo', 'lúa', 'estrela', 'cociña', 'cuarto',
+            // Adjetivos exclusivamente gallegos
+            'vermello', 'vermella', 'branco', 'branca', 'amarelo', 'amarela',
+            'pequeno', 'pequena', 'baixo', 'baixa', 'novo', 'nova', 'vello', 'vella',
+            'quente', 'limpo', 'limpa', 'bo', 'boa',
+            // Pronombres gallegos
+            'eu', 'ti', 'ela', 'eles', 'elas', 'nós', 'vós',
+            'meu', 'teu', 'seu', 'miña', 'túa', 'súa',
+            // Adverbios/partículas exclusivamente gallegas
+            'hoxe', 'onte', 'mañá', 'agora', 'tamén', 'mesmo', 'mesma',
+            'sempre', 'despois', 'lonxe', 'preto', 'máis', 'moito', 'pouco',
+            // Contracciones (solo existen en gallego)
+            'do', 'da', 'dos', 'das', 'ao', 'aos', 'co', 'coa', 'cos', 'coas',
+            'polo', 'pola', 'polos', 'polas', 'unha',
+            // Verbos exclusivamente gallegos
+            'falar', 'xogar', 'chorar', 'debuxar', 'facer', 'ter', 'poñer',
+            'escoitar', 'camiñar', 'traballar', 'estudar', 'ensinar'
+        ]);
+
+        function detectarIdioma(tokens) {
+            let gallegoCount = 0;
+            let totalWords = 0;
+            for (const token of tokens) {
+                if (token.type !== 'word') continue;
+                totalWords++;
+                if (marcadoresGallegos.has(token.value.toLowerCase())) gallegoCount++;
+            }
+            // Si al menos 1 palabra es exclusivamente gallega, asumir gallego
+            return gallegoCount >= 1;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -1244,7 +1285,23 @@
             'polo': 'por el', 'pola': 'por la', 'polos': 'por los', 'polas': 'por las',
             // Adverbios y otros
             'mesmo': 'mismo', 'mesma': 'misma', 'tamén': 'también',
-            'así': 'así', 'ben': 'bien', 'mal': 'mal', 'máis': 'más', 'menos': 'menos'
+            'así': 'así', 'ben': 'bien', 'mal': 'mal', 'máis': 'más', 'menos': 'menos',
+            // Infinitivos gallegos (distintos del español) para deconjugación
+            'xogar': 'jugar', 'falar': 'hablar', 'durmir': 'dormir',
+            'saír': 'salir', 'vir': 'venir', 'dicir': 'decir',
+            'poñer': 'poner', 'ter': 'tener', 'facer': 'hacer',
+            'camiñar': 'caminar', 'escoitar': 'escuchar', 'levar': 'llevar',
+            'debuxar': 'dibujar', 'pechar': 'cerrar', 'mercar': 'comprar',
+            'traballar': 'trabajar', 'estudar': 'estudiar', 'ensinar': 'enseñar',
+            'lembrar': 'recordar', 'esquecer': 'olvidar', 'coller': 'coger',
+            'empurrar': 'empujar', 'baixar': 'bajar', 'voar': 'volar',
+            'ler': 'leer', 'rir': 'reír', 'pedir': 'pedir', 'seguir': 'seguir',
+            'durmir': 'dormir', 'morrer': 'morir', 'nacer': 'nacer',
+            'crecer': 'crecer', 'vivir': 'vivir', 'sentir': 'sentir',
+            'caer': 'caer', 'subir': 'subir', 'cortar': 'cortar',
+            'limpar': 'limpiar', 'cociñar': 'cocinar', 'conducir': 'conducir',
+            'agradecer': 'agradecer', 'coñecer': 'conocer', 'pertencer': 'pertenecer',
+            'aparecer': 'aparecer', 'ofrecer': 'ofrecer'
         };
 
         // Verbos gallegos de emociones y acciones comunes
@@ -1563,19 +1620,160 @@
             // -ces → -z (peces → pez, luces → luz)
             if (word.endsWith('ces')) return word.slice(0, -3) + 'z';
 
-            // -es después de consonante
+            // -s cuando el resultado acaba en vocal (grandes → grande, casas → casa)
+            // Se prueba ANTES que -es para evitar falsos como grandes → grand
+            if (word.endsWith('s') && !word.endsWith('ss') && word.length > 2) {
+                const sinS = word.slice(0, -1);
+                if ('aeiouáéíóú'.includes(sinS[sinS.length - 1])) return sinS;
+            }
+
+            // -es después de vocal+consonante (paredes → pared, colores → color)
             if (word.endsWith('es') && word.length > 3) {
                 const sinEs = word.slice(0, -2);
                 const ultimaLetra = sinEs[sinEs.length - 1];
-                if ('dlnrsz'.includes(ultimaLetra)) return sinEs;
+                const penultimaLetra = sinEs.length > 1 ? sinEs[sinEs.length - 2] : '';
+                // Solo si la penúltima es vocal (pa-red → ✓, gran-d → ✗)
+                if ('dlnrsz'.includes(ultimaLetra) && 'aeiouáéíóú'.includes(penultimaLetra)) return sinEs;
             }
 
-            // -s simple (casas → casa, libros → libro)
+            // -s genérico (fallback)
             if (word.endsWith('s') && !word.endsWith('ss') && word.length > 2) {
                 return word.slice(0, -1);
             }
 
             return palabra; // Devolver original si no hay regla
+        }
+
+        // Desflexión de adjetivos: femenino/plural/superlativo → masculino singular
+        // Genera candidatos adicionales para probar en ARASAAC
+        function desflexionarAdjetivo(palabra) {
+            const word = palabra.toLowerCase();
+            const formas = [];
+
+            // Superlativo: -ísimo/a/os/as → base (altísimo → alto)
+            const supMatch = word.match(/^(.+?)ísim[oa]s?$/);
+            if (supMatch && supMatch[1].length >= 2) {
+                const base = supMatch[1];
+                formas.push(base + 'o', base + 'e', base);
+            }
+
+            // Femenino -a → masculino -o (roja → rojo)
+            if (word.endsWith('a') && word.length > 3) {
+                formas.push(word.slice(0, -1) + 'o');
+            }
+
+            // Femenino plural -as → masculino singular -o (rojas → rojo)
+            if (word.endsWith('as') && word.length > 4) {
+                formas.push(word.slice(0, -2) + 'o');
+            }
+
+            // Masculino plural -os → singular -o (rojos → rojo)
+            if (word.endsWith('os') && word.length > 4) {
+                formas.push(word.slice(0, -1));
+            }
+
+            return formas;
+        }
+
+        // Deconjugación genérica de verbos por patrón de sufijo
+        // Para verbos NO listados en los diccionarios locales
+        // Genera candidatos de infinitivo (-ar, -er, -ir)
+        function deconjugarVerbo(palabra) {
+            const w = palabra.toLowerCase();
+            const formas = [];
+            const vocales = 'aeiouáéíóú';
+
+            // Gerundio: -ando → -ar, -iendo → -er/-ir
+            if (w.endsWith('ando') && w.length > 5) formas.push(w.slice(0, -4) + 'ar');
+            if (w.endsWith('iendo') && w.length > 6) {
+                formas.push(w.slice(0, -5) + 'er', w.slice(0, -5) + 'ir');
+            }
+
+            // Participio: -ado → -ar, -ido → -er/-ir
+            if (w.endsWith('ado') && w.length > 4 && !vocales.includes(w[w.length - 4])) {
+                formas.push(w.slice(0, -3) + 'ar');
+            }
+            if (w.endsWith('ido') && w.length > 4 && !vocales.includes(w[w.length - 4])) {
+                formas.push(w.slice(0, -3) + 'er', w.slice(0, -3) + 'ir');
+            }
+
+            // Imperfecto: -aba/-abas/-aban → -ar
+            const impAr = w.match(/^(.{2,})(ábamos|abais|abas|aban|aba)$/);
+            if (impAr) formas.push(impAr[1] + 'ar');
+
+            // Imperfecto: -ía/-ías/-ían → -er/-ir
+            const impEr = w.match(/^(.{2,})(íamos|íais|ían|ías|ía)$/);
+            if (impEr) formas.push(impEr[1] + 'er', impEr[1] + 'ir');
+
+            // Pretérito: -aste/-aron → -ar, -ieron → -er/-ir
+            if (w.endsWith('aste') && w.length > 5) formas.push(w.slice(0, -4) + 'ar');
+            if (w.endsWith('aron') && w.length > 5) formas.push(w.slice(0, -4) + 'ar');
+            if (w.endsWith('ieron') && w.length > 6) {
+                formas.push(w.slice(0, -5) + 'er', w.slice(0, -5) + 'ir');
+            }
+
+            // Presente 1ª plural: -amos → -ar, -emos → -er, -imos → -ir
+            if (w.endsWith('amos') && w.length > 5) formas.push(w.slice(0, -4) + 'ar');
+            if (w.endsWith('emos') && w.length > 5) formas.push(w.slice(0, -4) + 'er');
+            if (w.endsWith('imos') && w.length > 5) formas.push(w.slice(0, -4) + 'ir');
+
+            // Presente 3ª plural: -an → -ar (cantan → cantar)
+            if (w.endsWith('an') && w.length > 4 && !w.match(/(ían|ban)$/)) {
+                formas.push(w.slice(0, -2) + 'ar');
+            }
+            // -en → -er/-ir (comen → comer)
+            if (w.endsWith('en') && w.length > 4 && !w.match(/(ien|yen)$/)) {
+                formas.push(w.slice(0, -2) + 'er', w.slice(0, -2) + 'ir');
+            }
+
+            // Presente 2ª singular: -as → -ar, -es → -er/-ir
+            if (w.endsWith('as') && w.length > 4 && !w.match(/(ías|bas)$/)) {
+                formas.push(w.slice(0, -2) + 'ar');
+            }
+            if (w.endsWith('es') && w.length > 4 && !w.match(/(ies|yes)$/)) {
+                formas.push(w.slice(0, -2) + 'er', w.slice(0, -2) + 'ir');
+            }
+
+            // Presente 3ª singular: -a → -ar (canta → cantar)
+            if (w.endsWith('a') && w.length > 3 && !w.match(/(ía|ba)$/)) {
+                formas.push(w.slice(0, -1) + 'ar');
+            }
+            // -e → -er/-ir (come → comer)
+            if (w.endsWith('e') && w.length > 3 && !w.match(/(ie|ye)$/)) {
+                formas.push(w.slice(0, -1) + 'er', w.slice(0, -1) + 'ir');
+            }
+
+            return [...new Set(formas)];
+        }
+
+        // Deconjugación específica de verbos gallegos
+        // Patrones que difieren del español: -endo, -indo, -ou, -eu, -iu, -ades, etc.
+        function deconjugarVerboGallego(palabra) {
+            const w = palabra.toLowerCase();
+            const formas = [];
+
+            // Gerundio gallego: -endo → -er (comendo → comer), -indo → -ir (partindo → partir)
+            if (w.endsWith('endo') && w.length > 5) formas.push(w.slice(0, -4) + 'er');
+            if (w.endsWith('indo') && w.length > 5) formas.push(w.slice(0, -4) + 'ir');
+
+            // Pretérito 3ª singular: -ou → -ar (falou → falar), -eu → -er, -iu → -ir
+            if (w.endsWith('ou') && w.length > 4) formas.push(w.slice(0, -2) + 'ar');
+            if (w.endsWith('eu') && w.length > 4) formas.push(w.slice(0, -2) + 'er');
+            if (w.endsWith('iu') && w.length > 4) formas.push(w.slice(0, -2) + 'ir');
+
+            // Pretérito 1ª singular: -ei → -ar (falei → falar)
+            if (w.endsWith('ei') && w.length > 4) formas.push(w.slice(0, -2) + 'ar');
+
+            // Pretérito 3ª plural: -eron → -er (comeron → comer), -iron → -ir
+            if (w.endsWith('eron') && w.length > 5) formas.push(w.slice(0, -4) + 'er');
+            if (w.endsWith('iron') && w.length > 5) formas.push(w.slice(0, -4) + 'ir');
+
+            // 2ª plural presente: -ades → -ar, -edes → -er, -ides → -ir
+            if (w.endsWith('ades') && w.length > 5) formas.push(w.slice(0, -4) + 'ar');
+            if (w.endsWith('edes') && w.length > 5) formas.push(w.slice(0, -4) + 'er');
+            if (w.endsWith('ides') && w.length > 5) formas.push(w.slice(0, -4) + 'ir');
+
+            return [...new Set(formas)];
         }
 
         // Función principal de normalización
@@ -1589,7 +1787,16 @@
             // 1. PRIMERO: Traducciones directas gallego → español (máxima prioridad)
             // Esto evita que "non" encuentre "esternón" o "onte" encuentre "contenedor"
             if (gallegoEspanol[word]) {
-                formas.push(gallegoEspanol[word]);
+                const traduccion = gallegoEspanol[word];
+                formas.push(traduccion);
+                // Para contracciones multi-palabra ("no"→"en el"), separar y buscar
+                // cada parte individualmente, descartando artículos
+                if (traduccion.includes(' ')) {
+                    const articulosEs = ['el', 'la', 'los', 'las', 'un', 'una'];
+                    traduccion.split(' ').forEach(p => {
+                        if (!articulosEs.includes(p)) formas.push(p);
+                    });
+                }
             }
 
             // 2. Verbos gallegos conjugados → infinitivo español
@@ -1613,13 +1820,39 @@
                 if (gallegoEspanol[singular]) {
                     formas.push(gallegoEspanol[singular]);
                 }
+                // 4b. Para palabras en -es, probar también quitando -es como sufijo
+                // (paredes → parede por regla -s, pero también probar pared)
+                if (word.endsWith('es') && word.length > 4) {
+                    const sinEs = word.slice(0, -2);
+                    if (sinEs !== singular) formas.push(sinEs);
+                }
             }
 
-            // 5. Forma original (solo si no hay traducciones)
-            // Se añade después de las traducciones para evitar falsos positivos
-            formas.push(word);
+            // 5. Forma original (saltar si es contracción gallega en texto gallego)
+            // Ej: "no" gallego = "en el" → no buscar "no" español (negación)
+            const traduccionDirecta = gallegoEspanol[word];
+            const esContraccionGallega = state.esGallego && traduccionDirecta && traduccionDirecta.includes(' ');
+            if (!esContraccionGallega) {
+                formas.push(word);
+            }
 
-            // 6. Sin acentos (última opción)
+            // Helper: añadir forma + su traducción gallego→español si existe
+            function addConTraduccion(forma) {
+                formas.push(forma);
+                if (gallegoEspanol[forma]) formas.push(gallegoEspanol[forma]);
+            }
+
+            // 6. Desflexión de adjetivos (roja → rojo, vermella → vermello → rojo)
+            desflexionarAdjetivo(word).forEach(addConTraduccion);
+
+            // 7. Deconjugación genérica de verbos (español + gallego)
+            // Solo si no se encontró en los diccionarios de verbos (pasos 2-3)
+            if (!verbosGallegoInfinitivo[word] && !verbosGallegoAdicionales[word] && !verbosEspanolInfinitivo[word]) {
+                deconjugarVerbo(word).forEach(addConTraduccion);
+                deconjugarVerboGallego(word).forEach(addConTraduccion);
+            }
+
+            // 8. Sin acentos (última opción)
             const sinAcentos = word.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             if (sinAcentos !== word) {
                 formas.push(sinAcentos);
@@ -1863,6 +2096,9 @@
             elements.loadingState.classList.remove('hidden');
             elements.previewContainer.classList.add('hidden');
 
+            // Detectar idioma antes de normalizar
+            state.esGallego = detectarIdioma(state.tokens);
+
             const selectedTokens = Array.from(state.selectedWords).map(idx => state.tokens[idx].value);
             const uniqueWords = [...new Set(selectedTokens.map(w => w.toLowerCase()))];
 
@@ -1976,6 +2212,7 @@
             `).join('');
 
             modal.classList.remove('hidden');
+            modal.classList.add('visible');
         }
 
         // Seleccionar alternativa
@@ -1985,13 +2222,17 @@
                 pictoData.url = newUrl;
                 state.pictos.set(word, pictoData);
             }
-            document.getElementById('alternativesModal').classList.add('hidden');
+            const modal = document.getElementById('alternativesModal');
+            modal.classList.remove('visible');
+            modal.classList.add('hidden');
             renderPreview();
         }
 
         // Cerrar modal
         function closeAlternativesModal() {
-            document.getElementById('alternativesModal').classList.add('hidden');
+            const modal = document.getElementById('alternativesModal');
+            modal.classList.remove('visible');
+            modal.classList.add('hidden');
         }
 
         // Exportar a .docx

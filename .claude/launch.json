@@ -1,0 +1,6 @@
+{
+  "preview": {
+    "command": "npx serve . -p 4001 --no-clipboard",
+    "port": 4001
+  }
+}

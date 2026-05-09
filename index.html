@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es" class="dark">
+<html lang="es" class="dark" data-preset="12-paper-ink">
 <head>
     <script>
         if (localStorage.getItem('darkMode') === 'false') {
@@ -21,7 +21,9 @@
     <!-- docx.js - Generar .docx -->
     <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
 
-    <style>
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,900&f[]=general-sans@200,300,400,500&display=swap" rel="stylesheet">
+<style>
         /* Reset y variables */
         *, *::before, *::after {
             box-sizing: border-box;
@@ -814,6 +816,29 @@
             }
         }
     </style>
+<style id="adri-overrides-v5.8">
+/* Capa adri-style v5.8 inline (Bold Signal real + anti-cajas §15). */
+body, body * { font-family: 'General Sans', system-ui, sans-serif; }
+body { font-weight: 200; letter-spacing: 0.005em; line-height: 1.55; }
+h1, h2, h3, h4, h5, h6, [class*="title"], [class*="header-title"] {
+  font-family: 'Satoshi', system-ui, sans-serif;
+  letter-spacing: 0.04em;
+}
+.btn, button, input, textarea, select { font-family: 'General Sans', system-ui, sans-serif; }
+input[type="text"], input[type="number"], input[type="email"], input:not([type]), textarea {
+  background: transparent !important; border: none !important;
+  border-bottom: 1px solid rgba(128,128,128,0.2) !important; border-radius: 0 !important;
+  padding: 8px 0 !important; font-weight: 200 !important;
+}
+.card, .panel, [class*="-card"], .modal-content {
+  border: none !important; box-shadow: none !important;
+}
+button.btn-primary, .btn-primary {
+  background: transparent !important; border: 1px solid currentColor !important;
+  border-radius: 4px !important; text-transform: uppercase;
+  font-size: 11px; letter-spacing: 0.18em; font-weight: 400;
+}
+</style>
 </head>
 <body>
     <div class="container">
